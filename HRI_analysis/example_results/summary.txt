@@ -1,0 +1,108 @@
+HRI ROBOT TRUST STUDY: RESULTS SUMMARY
+========================================
+
+Participants: 40    Questions answered: 720 of 720
+A result counts as significant when p < .05. 'Reliable' below means significant.
+Trust is rated 1 (lowest) to 5 (highest). Following = the chosen bowl matched the advised bowl.
+
+PART 1: TRUST (main question)
+----------------------------------------
+
+1. Which source do participants trust more? (primary test P1)
+   robot: 3.58   screen: 3.33   (n = 40 participants)
+   difference +0.24, 95% CI [+0.07, +0.41]
+   paired t(39) = 2.89, p = 0.006, dz = 0.46   (Wilcoxon p = 0.005)
+   Result: trust was reliably higher for the robot than for the screen (as predicted).
+
+2. Which source did participants say they trusted more overall? (final question, S1)
+   robot: 23   screen: 5   equal: 12
+   Among the 28 who chose a source, 82% chose the robot (95% CI 63% to 94%), exact binomial p < .001.
+   Result: reliably more participants chose the robot.
+   The final answer matched the average ratings for 23 of 40 participants. The reasons are listed in the results Excel (sheet 'Final reasons').
+
+3. Trust by level (descriptive, no test)
+   easy: robot 3.70   screen 3.42   (robot minus screen +0.28)
+   medium: robot 3.70   screen 3.45   (robot minus screen +0.25)
+   hard: robot 3.33   screen 3.12   (robot minus screen +0.20)
+
+4. Order check (C2): did the rating order matter?
+   participants who rated robot first: 20, screen first: 20
+   trust difference (robot minus screen): robot first +0.15, screen first +0.33, p = 0.280
+   Result: no sign that the rating order changed the trust difference.
+
+PART 2: TRUST AND FOLLOWING THE ADVICE
+----------------------------------------
+
+5. Is the robot followed more than the screen? (primary test P2, H1 behavior)
+   robot: 71.7%   screen: 69.7%   (n = 40 participants)
+   difference +1.9 percentage points, 95% CI [-2.3, +6.2]
+   paired t(39) = 0.93, p = 0.360, dz = 0.15   (Wilcoxon p = 0.533)
+   Result: no reliable difference in the share of advice followed between the robot and the screen (this does not prove they are equal).
+
+6. When a source is trusted more, is it also followed more? (primary test P3)
+   Compares the same person across their level-and-source cells, accounting for source and level.
+   participants contributing: 35 (210 level-and-source cells)
+   change in trust (1 to 5 scale) for each extra 100% of that source's advice followed: +0.79, 95% CI [-0.00, +1.58], t(34) = 2.02, p = 0.051, partial r = 0.19
+   Result: no reliable link between trust and following.
+   This shows an association only. Trust is rated after the level, so following came first.
+
+7. Between people (S4): do those who trust the robot more than the screen also follow it more?
+   Spearman rho = 0.28 (n = 40), p = 0.081
+   Result: no reliable link.
+
+PART 3: TRUST AND CORRECTNESS
+----------------------------------------
+
+Advice correctness: each source's advice was correct 67% of the time in every level, by design, so it cannot explain trust differences.
+
+8. Does trust drop when the participant followed that source's wrong advice? (S2)
+   participants contributing: 32 (192 level-and-source cells)
+   change in trust (1 to 5 scale) when the wrong advice was followed (vs caught): -0.08, 95% CI [-0.36, +0.19], t(31) = -0.61, p = 0.546, Holm-adjusted p = 0.546, partial r = -0.05
+   Result: no reliable link between trust and being fooled by the source.
+
+9. Does trust follow the participant's own correctness with that source's questions? (S3)
+   participants contributing: 36 (216 level-and-source cells)
+   change in trust (1 to 5 scale) for each extra 100% correct on that source's questions: +1.04, 95% CI [+0.34, +1.74], t(35) = 3.03, p = 0.005, Holm-adjusted p = 0.009, partial r = 0.25
+   Result: trust was higher when the participant was more often right.
+   S2 and S3 are adjusted together (Holm), because they are exploratory.
+
+PART 4: SECONDARY BEHAVIOR HYPOTHESES (H2 to H4) AND CHECKS
+----------------------------------------
+
+H2 (S5): Is advice followed less right after a wrong advice?
+   after_error: 94.0%   baseline: 97.0%   (n = 39 participants)
+   difference -3.0 percentage points, 95% CI [-8.4, +2.4]
+   within-person permutation test p = 0.398, dz = -0.18   (paired t-test p = 0.268, shown for comparison only)
+   Result: no reliable difference in the share followed between right after an error and baseline (this does not prove they are equal).
+
+H3 (S6, exploratory): Is the drop different after robot errors than after screen errors?
+   after_robot_error: 93.3%   after_screen_error: 95.0%   (n = 40 participants)
+   difference -1.7 percentage points, 95% CI [-8.0, +4.7]
+   paired t(39) = -0.53, p = 0.599, dz = -0.08   (Wilcoxon p = 0.776)
+   Result: no reliable difference in the share followed between after robot errors and after screen errors (this does not prove they are equal).
+   (Based on very few trials per person, so low power.)
+
+H4 (S7): Is advice followed more as the levels get harder?
+   easy 67.9%   medium 72.9%   hard 71.3%
+   difference +3.3 percentage points, 95% CI [-2.0, +8.6]
+   paired t(39) = 1.27, p = 0.210, dz = 0.20   (Wilcoxon p = 0.171)
+   Friedman test across all three levels: p = 0.089
+   Result: no reliable difference in the share followed between the hard level and the easy level (this does not prove they are equal).
+
+Difficulty checks (are the levels really harder?)
+   accuracy: easy 96.3%   medium 89.6%   hard 83.8%
+   difference -12.5 percentage points, 95% CI [-18.7, -6.3]
+   paired t(39) = -4.05, p < .001, dz = -0.64   (Wilcoxon p < .001)
+   Result: accuracy was reliably lower for the hard level than for the easy level (as predicted).
+   typical decision time: easy 2.3s   medium 3.8s   hard 6.4s
+   hard decisions took 2.84 times as long as easy ones (95% CI 2.67 to 3.03), paired t(39) = 33.46, p < .001   (Wilcoxon p < .001)
+   Result: decision time was reliably higher for the hard level than for the easy level (as predicted).
+
+Notes:
+- Paired tests compare each person with themselves. A Wilcoxon test is reported as a backup.
+- H2 uses a permutation test: follow rates of correct advice sit near 100%, where the t-test is too liberal.
+- Following correct advice can also mean the participant knew the answer, so 'followed' mixes
+  reliance with agreement. Following WRONG advice (Reliance sheets) is the cleaner reliance signal.
+- Levels always run easy, medium, hard, so difficulty is partly mixed up with fatigue and learning.
+- No correction for multiple tests on the three primary tests. S2 and S3 are adjusted with Holm.
+- H3 is exploratory (few trials per person). See the README for limitations and assumptions.
