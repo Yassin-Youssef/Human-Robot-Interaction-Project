@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- The robot's normal bringup (cu_panda_bringup hardware.launch) plus the study blocks.
+
+     Use it INSTEAD of hardware.launch (stop that one first with Ctrl+C):
+
+       roslaunch hri_study_description robot.launch
+
+     It starts the real robot stack (franka_control, MoveIt, gripper, cameras, RViz).
+     The only change: robot_description is the combined model from
+     urdf/study_setup.urdf.xacro (lab model + blocks), so the blocks show in RViz.
+     After editing config/blocks.yaml, restart this launch file. -->
+<launch>
+  <arg name="rviz" default="true"/>
+
+  <include file="$(find cu_panda_bringup)/launch/hardware.launch">
+    <arg name="rviz" value="$(arg rviz)"/>
+  </include>
+
+  <!-- Replaces the robot_description that hardware.launch set above. roslaunch keeps the
+       last value and sets all parameters before any node starts. -->
+  <param name="robot_description"
+         command="xacro $(find hri_study_description)/urdf/study_setup.urdf.xacro"/>
+</launch>

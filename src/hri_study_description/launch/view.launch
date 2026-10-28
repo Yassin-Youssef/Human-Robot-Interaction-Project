@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!-- Offline view of the lab robot, the table and the study blocks in RViz.
+
+     Run it on its OWN ROS master, never on the robot's master (port 11311):
+
+       ROS_MASTER_URI=http://localhost:11312 roslaunch -p 11312 hri_study_description view.launch
+
+     Why: this file loads robot_description and publishes made-up joint states. On the
+     robot's master that would confuse MoveIt and the real robot's TF.
+
+     To move a block: edit config/blocks.yaml, then stop (Ctrl+C) and start this again.
+     Option: joint_sliders:=true opens sliders to move the arm. -->
+<launch>
+  <arg name="joint_sliders" default="false"/>
+
+  <!-- Safety stop: refuse to start when the shell points at the robot's master.
+       The include names a file that does not exist on purpose, so roslaunch aborts
+       with this file name in the error message before anything starts. -->
+  <arg name="master_uri" default="$(optenv ROS_MASTER_URI)"/>
+  <include if="$(eval ':11311' in arg('master_uri'))"
+           file="$(dirname)/STOPPED_this_is_the_robot_master_11311_use_port_11312.launch"/>
+
+  <param name="robot_description"
+         command="xacro $(find hri_study_description)/urdf/study_setup.urdf.xacro"/>
+
+  <!-- Arm pose for viewing, same as the lab's cu_panda_bringup simulation_jsp.launch. -->
+  <group ns="joint_state_publisher">
+    <rosparam>
+zeros:
+  panda_joint1: 0.0
+  panda_joint2: 0.0
+  panda_joint3: 0.0
+  panda_joint4: 0.0
+  panda_joint5: 0.0
+  panda_joint6: 1.57
+  panda_joint7: 0.79
+  panda_finger_joint1: 0.04
+    </rosparam>
+  </group>
+  <node unless="$(arg joint_sliders)" pkg="joint_state_publisher" type="joint_state_publisher"
+        name="joint_state_publisher"/>
+  <node if="$(arg joint_sliders)" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui"
+        name="joint_state_publisher"/>
+
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher"/>
+
+  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find hri_study_description)/rviz/view.rviz"/>
+</launch>

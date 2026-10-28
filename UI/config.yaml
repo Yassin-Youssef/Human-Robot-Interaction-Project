@@ -17,7 +17,7 @@ fake_robot:
 # Maximum reading time for the statements screen in seconds. null = no limit (Enter only).
 max_reading_time_s: null
 
-font_family: Helvetica
+font_family: Quicksand   # rounded friendly font (installed); Helvetica if missing
 font_sizes:
   title: 48
   text: 40
@@ -35,3 +35,8 @@ debrief_text: |
   In fact, all advice in this study was correct.
 
   Please do not discuss this study with other participants.
+
+# Friendly look: progress dots, advice icons (same gray bowl or robot drawing for both
+# sources), moving robot while the robot works, fade-in of each screen. false = plain text.
+animations: true
+fade_ms: 250

@@ -2,3 +2,10 @@ __pycache__/
 *.pyc
 ~$*
 results/
+
+# catkin workspace build output
+build/
+devel/
+logs/
+install/
+.catkin_tools/

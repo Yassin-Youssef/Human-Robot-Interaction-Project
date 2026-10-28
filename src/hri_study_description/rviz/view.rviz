@@ -1,0 +1,129 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+    Splitter Ratio: 0.5
+  - Class: rviz/Views
+    Name: Views
+    Splitter Ratio: 0.5
+Preferences:
+  PromptSaveOnExit: false
+Visualization Manager:
+  Class: ""
+  Displays:
+    # 10 cm grid starting at the table corner, lifted 1 mm so it shows on the table top.
+    - Alpha: 0.6
+      Cell Size: 0.1
+      Class: rviz/Grid
+      Color: 40; 40; 40
+      Enabled: true
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Name: Grid 10 cm (from table_corner)
+      Normal Cell Count: 0
+      Offset:
+        X: 0.3
+        Y: 0.5
+        Z: 0.001
+      Plane: XY
+      Plane Cell Count: 12
+      Reference Frame: table_corner
+      Value: true
+    - Alpha: 1
+      Class: rviz/RobotModel
+      Collision Enabled: false
+      Enabled: true
+      Name: Robot, table and blocks
+      Robot Description: robot_description
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Alpha: 1
+      Class: rviz/Axes
+      Enabled: true
+      Length: 0.1
+      Name: table_corner (x red, y green)
+      Radius: 0.005
+      Reference Frame: table_corner
+      Show Trail: false
+      Value: true
+    # Slot labels: the name of each block's frame (s1_red_cuboid ...), shown just above the block.
+    - Class: rviz/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        s1_red_cuboid:
+          Value: true
+        s2_red_cylinder:
+          Value: true
+        s3_red_hexagon:
+          Value: true
+        s4_blue_cuboid:
+          Value: true
+        s5_blue_cylinder:
+          Value: true
+        s6_blue_hexagon:
+          Value: true
+        s7_green_cuboid:
+          Value: true
+        s8_green_cylinder:
+          Value: true
+        s9_green_hexagon:
+          Value: true
+        bowl_red:
+          Value: true
+        bowl_blue:
+          Value: true
+        decision:
+          Value: true
+      Marker Alpha: 1
+      Marker Scale: 0.25
+      Name: Slot, bowl and decision labels
+      Show Arrows: false
+      Show Axes: false
+      Show Names: true
+      Update Interval: 0
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Default Light: true
+    Fixed Frame: table_corner
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+      Hide Inactive Objects: true
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+  Value: true
+  Views:
+    # Seen from the participant's side of the table, looking at the robot.
+    Current:
+      Class: rviz/Orbit
+      Distance: 1.8
+      Field of View: 0.785
+      Focal Point:
+        X: 0.36
+        Y: 0.55
+        Z: 0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.85
+      Target Frame: <Fixed Frame>
+      Yaw: 0
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1400
+  Displays:
+    collapsed: false
+  Views:
+    collapsed: true

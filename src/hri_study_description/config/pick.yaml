@@ -1,0 +1,98 @@
+# Settings for the robot calls (src/hri_study_description/robot.py, pick_block.py, UI).
+# Units: meters, seconds, newtons, radians. Block sizes and positions come from blocks.yaml.
+
+# true: wait for Enter in the terminal before every move (q + Enter stops).
+# false: run automatically, only print each next move in the terminal.
+confirm: false
+
+# home() reuses the lab's "Move Home" (script panel ~/scripts/move-home): it publishes
+# {group, target} on /moveit_by_name, then waits until the arm is at the SRDF joints of
+# that target. moveit_by_name uses its own speed setting, not velocity_scaling below.
+home:
+  group: arm
+  target: home
+  timeout: 60.0     # s, raise if the arm is not home by then
+  tolerance: 0.02   # rad, max joint difference that counts as "at home"
+
+# ROBOT-SPECIFIC names (cu_panda_moveit_config SRDF and our URDF).
+arm_group: arm               # MoveIt group: chain panda_link0 -> panda_hand_tcp
+# Group for the straight moves: same joints as "arm", but its IK solver (bio_ik mode
+# gd_c, see cu_panda_moveit_config kinematics.yaml) searches locally from the previous
+# posture. The "arm" group's IK searches globally and can jump between postures from one
+# step to the next, which made the arm shake on the way down.
+line_group: arm_local
+eef_link: panda_hand_tcp     # tool center point, 10.34 cm below the flange
+gripper_group: gripper       # MoveIt group of the fingers, only used with --sim
+finger_joint: panda_finger_joint1   # each finger moves half of the total opening
+table_frame: table_corner    # frame of the block positions (urdf/study_setup.urdf.xacro)
+
+# Links allowed to touch the held block: hand, fingers, the lab's fingertips, and the
+# URDF table (the block still rests on it when the lift starts).
+touch_links: [panda_hand, panda_leftfinger, panda_rightfinger, panda_lefttip_body, panda_righttip_body, table]
+
+# Speed: fraction of the robot's joint and straight-line speed limits.
+velocity_scaling: 0.2
+acceleration_scaling: 0.2
+planning_time: 5.0           # s, time allowed to find the move above the block
+
+# Arm posture used as the starting guess for the pose above the block: the Franka
+# "ready" pose (gripper pointing down, elbow up), with joint 1 turned toward the block.
+# Gives a natural posture for the straight moves down and up, with the elbow away from
+# the wall behind the robot.
+ik_seed: [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
+base_frame: panda_link0      # robot base, used to turn joint 1 of ik_seed toward the block
+
+# Reach (checked with MoveIt for this setup): block centers must be about 44 to 67 cm
+# from the robot base center (x 0.193, y 0.148 in table_corner). Closer than about 40 cm
+# the folded arm touches its own safety shapes or the wall model.
+
+# A straight move is refused (before anything moves) if its joints travel more than this
+# many times the direct joint distance: a zig-zag that would make the arm shake.
+max_joint_travel_ratio: 1.5
+
+# The search for an arm posture above a block is partly random. Close to the robot base
+# many postures cannot go straight down (the folded wrist touches its own safety shapes).
+# Collect postures this many rounds (over all gripper turns) and use the first one whose
+# straight moves can be planned.
+posture_tries: 5
+
+approach_height: 0.10        # the straight moves down start this far above the grasp/place pose
+lift_height: 0.10            # straight lift after the grasp, and after letting go
+place_clearance: 0.003       # the block is let go this far above the table
+
+# ROBOT-SPECIFIC (lab fingertips, cu_panda_description URDF): the finger pad center is
+# 0.019 m below panda_hand_tcp and the fingertips end 0.029 m below it.
+grasp_z_offset: 0.019        # TCP this far above the block center = pads centered on it
+fingertip_length: 0.029
+# The fingertips always stay at least this far above the table. For low blocks (under
+# 3 cm) this wins over centering the pads: the TCP stays higher.
+min_table_clearance: 0.005
+
+obstacle_padding: 0.01       # obstacles are this much bigger than the blocks on every side
+
+gripper:
+  open_width: 0.075          # total finger opening before the grasp (max 0.08)
+  speed: 0.05                # m/s
+  force: 10.0                # N, grasp force
+  epsilon: 0.005             # grasp succeeds if the measured width = block width +- this
+  timeout: 15.0              # s
+
+# Max joint error (rad) between the planned end of a move and where the robot stopped.
+joint_tolerance: 0.01
+
+# Push cue, point(bowl): from home, close the gripper, go above the decision spot, move
+# start_offset sideways away from the target bowl, go down, push the block toward the
+# target bowl at `speed`, go up, go home. Red and blue are exact mirror images.
+push:
+  end_distance_to_bowl: 0.15   # the block center stops this far from the target bowl center
+  start_offset: 0.06           # the gripper starts this far from the block center, far side
+  fingertip_height: 0.015      # fingertips this far above the table during the push
+  speed: 0.04                  # m/s, push only
+  closed_width: 0.0            # gripper closed during the push
+  # ROBOT-SPECIFIC: half the thickness of the closed fingertips along the push, from the
+  # TCP to the pushing face (lab fingertips, cu_panda_description URDF).
+  pusher_half_thickness: 0.01
+  min_length: 0.03             # refuse a block push shorter or longer than this
+  max_length: 0.20
+  bowl_margin: 0.01            # bowls are obstacles in MoveIt, this much bigger on every side
+

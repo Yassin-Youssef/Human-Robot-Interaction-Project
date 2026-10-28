@@ -1,0 +1,188 @@
+<?xml version="1.0"?>
+<!-- The lab's robot and table model plus the study blocks, in one file.
+
+     Used as robot_description by launch/robot.launch (real robot) and launch/view.launch
+     (offline). The blocks are visual only and fixed, so MoveIt's collision checking and
+     the robot control work as with the lab's model.
+
+     Block positions, sizes and colors come from config/blocks.yaml. -->
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="cu_panda">
+
+  <!-- The lab's model (cu_panda_description): Panda arm with hand and short fingertips,
+       mounting plate, table (link "table"), table surface frame "table_top", wall,
+       window and camera collision boxes. Not edited here. -->
+  <xacro:include filename="$(find cu_panda_description)/robots/basic_setup.urdf.xacro"/>
+
+  <xacro:property name="layout"
+                  value="${xacro.load_yaml('$(find hri_study_description)/config/blocks.yaml')}"/>
+
+  <!-- table_corner: the origin of every block position. -->
+  <xacro:property name="corner" value="${layout['table_corner']}"/>
+  <link name="table_corner"/>
+  <joint name="table_corner_joint" type="fixed">
+    <parent link="table_top"/>
+    <child link="table_corner"/>
+    <origin xyz="${corner['x']} ${corner['y']} ${corner['z']}" rpy="0 0 ${corner['yaw']}"/>
+  </joint>
+
+  <!-- One block resting on the table, centered on its slot: a box (cuboid), an upright
+       cylinder or an upright hexagon. Visual only (no collision element), so it can never
+       block the robot's planning. The link (frame) is named like the slot, for example
+       s1_red_cuboid, and sits label_gap above the block top, so RViz's TF display shows
+       the slot label above each block. -->
+  <xacro:property name="label_gap" value="0.015"/>
+  <xacro:macro name="block_visual" params="b yaw:=0 *geometry">
+    <visual>
+      <origin xyz="0 0 ${-(height / 2 + label_gap)}" rpy="0 0 ${yaw}"/>
+      <geometry>
+        <xacro:insert_block name="geometry"/>
+      </geometry>
+      <material name="${b['id']}_${b['color']}_${int(round(yaw * 100))}">
+        <color rgba="${layout['colors'][b['color']]}"/>
+      </material>
+    </visual>
+  </xacro:macro>
+
+  <xacro:macro name="block" params="b">
+    <xacro:property name="t" value="${layout['block_types'][b['type']]}"/>
+    <xacro:property name="height" value="${t['size'][2] if t['shape'] == 'box' else t['height']}"/>
+    <xacro:property name="link" value="${b['id']}_${b['name'].replace(' ', '_')}"/>
+    <link name="${link}">
+      <xacro:if value="${t['shape'] == 'box'}">
+        <xacro:block_visual b="${b}">
+          <box size="${t['size'][0]} ${t['size'][1]} ${t['size'][2]}"/>
+        </xacro:block_visual>
+      </xacro:if>
+      <xacro:if value="${t['shape'] == 'cylinder'}">
+        <!-- A URDF cylinder runs along its own z axis, so it stands upright. -->
+        <xacro:block_visual b="${b}">
+          <cylinder radius="${t['diameter'] / 2}" length="${t['height']}"/>
+        </xacro:block_visual>
+      </xacro:if>
+      <xacro:if value="${t['shape'] == 'hexagon'}">
+        <!-- URDF has no hexagon. Three boxes, each across_flats wide and one side long
+             (across_flats / sqrt(3)), turned 0, 60 and 120 degrees, cover exactly the
+             regular hexagon. Flat sides face local +y and -y at yaw 0. -->
+        <xacro:property name="side" value="${t['across_flats'] / sqrt(3)}"/>
+        <xacro:block_visual b="${b}" yaw="0">
+          <box size="${side} ${t['across_flats']} ${t['height']}"/>
+        </xacro:block_visual>
+        <xacro:block_visual b="${b}" yaw="${pi / 3}">
+          <box size="${side} ${t['across_flats']} ${t['height']}"/>
+        </xacro:block_visual>
+        <xacro:block_visual b="${b}" yaw="${2 * pi / 3}">
+          <box size="${side} ${t['across_flats']} ${t['height']}"/>
+        </xacro:block_visual>
+      </xacro:if>
+    </link>
+    <joint name="${b['id']}_joint" type="fixed">
+      <parent link="table_corner"/>
+      <child link="${link}"/>
+      <origin xyz="${b['x']} ${b['y']} ${height + label_gap}" rpy="0 0 ${b['yaw']}"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- xacro has no for-loop, so this macro adds the first block and calls itself on the rest. -->
+  <xacro:macro name="blocks" params="items">
+    <xacro:if value="${len(items) > 0}">
+      <xacro:block b="${items[0]}"/>
+      <xacro:blocks items="${items[1:]}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:blocks items="${layout['blocks']}"/>
+
+  <!-- Bowls: an open bowl drawn as a thin bottom disc plus a ring of 16 thin wall pieces.
+       Visual only. The frame (bowl_red, bowl_blue) sits label_gap above the rim, so RViz
+       shows the bowl name there. Sizes and positions: bowl_size and bowls in blocks.yaml. -->
+  <xacro:property name="bowl" value="${layout['bowl_size']}"/>
+  <xacro:property name="bowl_segments" value="16"/>
+  <xacro:macro name="bowl_walls" params="b k">
+    <xacro:if value="${bowl_segments > k}">
+      <!-- Wall piece k on the oval rim (half axes rx, ry), turned along the rim. -->
+      <xacro:property name="a" value="${2 * pi * k / bowl_segments}"/>
+      <xacro:property name="rx" value="${bowl['size_x'] / 2 - 0.0025}"/>
+      <xacro:property name="ry" value="${bowl['size_y'] / 2 - 0.0025}"/>
+      <xacro:property name="speed" value="${sqrt((rx * sin(a)) ** 2 + (ry * cos(a)) ** 2)}"/>
+      <visual>
+        <origin xyz="${rx * cos(a)} ${ry * sin(a)} ${-(bowl['height'] / 2 + label_gap)}"
+                rpy="0 0 ${atan2(ry * cos(a), -rx * sin(a)) - pi / 2}"/>
+        <geometry>
+          <box size="0.005 ${2 * sin(pi / bowl_segments) * speed + 0.004} ${bowl['height']}"/>
+        </geometry>
+        <material name="${b['id']}_${k}">
+          <color rgba="${layout['colors'][b['color']]}"/>
+        </material>
+      </visual>
+      <xacro:bowl_walls b="${b}" k="${k + 1}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:macro name="bowl" params="b">
+    <link name="${b['id']}">
+      <visual>
+        <!-- Bottom: a thin disc inside the oval rim. -->
+        <origin xyz="0 0 ${-(bowl['height'] + label_gap) + 0.0015}" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="${min(bowl['size_x'], bowl['size_y']) / 2 - 0.004}" length="0.003"/>
+        </geometry>
+        <material name="${b['id']}_bottom">
+          <color rgba="${layout['colors'][b['color']]}"/>
+        </material>
+      </visual>
+      <xacro:bowl_walls b="${b}" k="0"/>
+    </link>
+    <joint name="${b['id']}_joint" type="fixed">
+      <parent link="table_corner"/>
+      <child link="${b['id']}"/>
+      <origin xyz="${b['x']} ${b['y']} ${bowl['height'] + label_gap}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="bowls" params="items">
+    <xacro:if value="${len(items) > 0}">
+      <xacro:bowl b="${items[0]}"/>
+      <xacro:bowls items="${items[1:]}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:bowls items="${layout.get('bowls', [])}"/>
+
+  <!-- Place spots (decision area): a small X flat on the table, two crossed strips.
+       Visual only. The frame (named like the spot, e.g. "decision") sits label_gap above
+       the table, so RViz shows the name there. -->
+  <xacro:property name="x_mark_length" value="0.06"/>
+  <xacro:macro name="x_strip" params="p yaw">
+    <visual>
+      <origin xyz="0 0 ${-label_gap + 0.001}" rpy="0 0 ${yaw}"/>
+      <geometry>
+        <box size="${x_mark_length} 0.006 0.002"/>
+      </geometry>
+      <material name="${p['id']}_mark_${int(round(yaw * 100))}">
+        <color rgba="0.95 0.85 0.10 1.0"/>
+      </material>
+    </visual>
+  </xacro:macro>
+
+  <xacro:macro name="place_spot" params="p">
+    <link name="${p['id']}">
+      <xacro:x_strip p="${p}" yaw="${pi / 4}"/>
+      <xacro:x_strip p="${p}" yaw="${-pi / 4}"/>
+    </link>
+    <joint name="${p['id']}_joint" type="fixed">
+      <parent link="table_corner"/>
+      <child link="${p['id']}"/>
+      <origin xyz="${p['x']} ${p['y']} ${label_gap}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="place_spots" params="items">
+    <xacro:if value="${len(items) > 0}">
+      <xacro:place_spot p="${items[0]}"/>
+      <xacro:place_spots items="${items[1:]}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:place_spots items="${layout.get('places', [])}"/>
+
+</robot>

@@ -1,0 +1,60 @@
+# Study blocks, read by urdf/study_setup.urdf.xacro. Units: meters and radians.
+#
+# Block positions are in the table_corner frame: origin on the table surface at the
+# table corner next to the robot, x pointing away from the back edge (wall side),
+# y pointing away from the side edge next to the robot (window side), z up.
+# In RViz the grid lines are 10 cm apart, starting at this corner.
+
+table_corner:
+  # Offset from the lab's table_top frame (center of the modeled table, on its surface).
+  # Default = the corner of the modeled 0.70 x 1.074 m table. Change it only if the
+  # real table differs from the model.
+  x: -0.35
+  y: -0.537
+  z: 0.0
+  yaw: 0.0
+
+# Shape and size per block type (meters). All three types are 4.5 cm wide and high.
+#   box:      size = [x, y, z]
+#   cylinder: stands upright on its flat end
+#   hexagon:  stands upright, across_flats = distance between two opposite flat sides
+block_types:
+  cuboid:   {shape: box,      size: [0.045, 0.045, 0.045]}
+  cylinder: {shape: cylinder, diameter: 0.045, height: 0.045}
+  hexagon:  {shape: hexagon,  across_flats: 0.045, height: 0.045}   # TODO: PLACEHOLDER, measure the real hexagon
+
+# RGBA colors used in RViz.
+colors:
+  red:   "0.80 0.10 0.10 1.0"
+  blue:  "0.10 0.25 0.80 1.0"
+  green: "0.10 0.60 0.20 1.0"
+
+# 9 fixed slots, one block each. name = exactly the name the UI uses ("red cuboid").
+# x, y = block center. yaw = turn about the vertical axis (cuboid and hexagon only).
+# Reach: every slot is 44 to 63 cm from the robot base center (x 0.193, y 0.148).
+# Column x 0.10 is 10 cm from the back edge, next to the wall model behind the table.
+blocks:
+  - {id: s1, name: "red cuboid",     type: cuboid,   color: red,   x: 0.085, y: 0.56,yaw: 0.0}
+  - {id: s2, name: "red cylinder",   type: cylinder, color: red,   x: 0.225, y: 0.56, yaw: 0.0}
+  - {id: s3, name: "red hexagon",    type: hexagon,  color: red,   x: 0.37, y: 0.56, yaw: 0.0}
+  - {id: s4, name: "blue cuboid",    type: cuboid,   color: blue,  x: 0.085, y: 0.66, yaw: 0.0}
+  - {id: s5, name: "blue cylinder",  type: cylinder, color: blue,  x: 0.225, y: 0.66, yaw: 0.0}
+  - {id: s6, name: "blue hexagon",   type: hexagon,  color: blue,  x: 0.37, y: 0.66, yaw: 0.0}
+  - {id: s7, name: "green cuboid",   type: cuboid,   color: green, x: 0.085, y: 0.76, yaw: 0.0}
+  - {id: s8, name: "green cylinder", type: cylinder, color: green, x: 0.225, y: 0.76, yaw: 0.0}
+  - {id: s9, name: "green hexagon",  type: hexagon,  color: green, x: 0.37, y: 0.76, yaw: 0.0}
+
+# Spots where the robot puts a block down. x, y = center of the placed block,
+# yaw = turn of the placed block (no effect on a cylinder).
+places:
+  - {id: decision, x: 0.52, y: 0.6275, yaw: 0.0}   # decision area, exactly midway between the bowl centers
+
+# Bowls, drawn in RViz only (no collision, the robot does not use them yet).
+# x, y = bowl center. Red on the participant's left (smaller y), blue on the right.
+bowl_size:          # measured, slightly oval
+  size_x: 0.19      # outer, along x (from the back edge toward the participant)
+  size_y: 0.20      # outer, along y (along the back edge)
+  height: 0.04
+bowls:
+  - {id: bowl_red,  color: red,  x: 0.52, y: 0.395}
+  - {id: bowl_blue, color: blue, x: 0.52, y: 0.86}

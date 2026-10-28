@@ -117,3 +117,13 @@ Practice trials, consent form text, final debrief text, the Excel data-entry tem
 - Resume after an interruption: `--start-level hard --start-question 4`. Resuming at question 2 to 6 skips the statements screen and shows "Press Enter for the next block".
 - Without `--dry-run` the UI uses `RosRobot`, which is still a stub: it stops at the first robot call with a clear error in the experimenter window. Quit with Escape.
 - Between questions there are two Enters: one after the decision (the arm goes home on robot trials) and one on "Press Enter for the next block". Only the first question of a level starts directly from the statements screen.
+- Friendly look (added on request, overrides "one neutral style, no icons, no colors on RED and BLUE,
+  no animation" in section 5): lavender background with the content on a white rounded card, Quicksand
+  rounded font, purple headings, progress dots with "Level 1 · Block 3 of 6" (levels shown as 1 and 2
+  instead of easy and hard), a moving robot drawing while the robot presents the block or returns home,
+  and short fade-ins. Screen trials show a red or blue bowl in the advised color and "Screen recommends:"
+  with the word RED or BLUE in that color. Robot trials show a purple robot-arm drawing and "Robot giving
+  advice" (no bowl color; the robot's push shows the bowl). Note for the group: the colored bowl and word
+  make the screen advice more eye-catching than the robot cue, which can affect the robot vs screen
+  comparison. On screen trials the decision clock starts after the 0.25 s fade. `animations: false` in
+  `config.yaml` restores plain text.

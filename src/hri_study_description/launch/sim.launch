@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!-- Simulation to test pick_block.py without the robot: MoveIt with fake controllers,
+     RViz, and the combined model (lab robot + blocks).
+
+     Run it on its OWN ROS master, never on the robot's master (port 11311):
+
+       ROS_MASTER_URI=http://localhost:11312 roslaunch -p 11312 hri_study_description sim.launch
+
+     Then, in a second terminal with the same ROS_MASTER_URI, run pick_block.py with its
+     sim option (see the usage text at the top of scripts/pick_block.py). -->
+<launch>
+  <!-- Safety stop, as in view.launch: this file publishes simulated joint states, so it
+       must never run on the robot's master. The include names a file that does not exist
+       on purpose, so roslaunch aborts with this file name before anything starts. -->
+  <arg name="master_uri" default="$(optenv ROS_MASTER_URI)"/>
+  <include if="$(eval ':11311' in arg('master_uri'))"
+           file="$(dirname)/STOPPED_this_is_the_robot_master_11311_use_port_11312.launch"/>
+
+  <include file="$(find cu_panda_moveit_config)/launch/demo.launch">
+    <arg name="moveit_controller_manager" value="fake"/>
+  </include>
+
+  <!-- Replaces the lab model that demo.launch loads (roslaunch keeps the last value). -->
+  <param name="robot_description"
+         command="xacro $(find hri_study_description)/urdf/study_setup.urdf.xacro"/>
+</launch>
