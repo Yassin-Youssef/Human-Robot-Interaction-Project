@@ -1,0 +1,5 @@
+Linked: (/home/hri26-group2/ros/devel/.private/hri_study_description/share/hri_study_description/cmake/hri_study_descriptionConfig-version.cmake, /home/hri26-group2/ros/devel/share/hri_study_description/cmake/hri_study_descriptionConfig-version.cmake)
+Linked: (/home/hri26-group2/ros/devel/.private/hri_study_description/share/hri_study_description/cmake/hri_study_descriptionConfig.cmake, /home/hri26-group2/ros/devel/share/hri_study_description/cmake/hri_study_descriptionConfig.cmake)
+Linked: (/home/hri26-group2/ros/devel/.private/hri_study_description/lib/pkgconfig/hri_study_description.pc, /home/hri26-group2/ros/devel/lib/pkgconfig/hri_study_description.pc)
+Symlinking /home/hri26-group2/ros/devel/lib/hri_study_description/pick_block.py
+Symlinking /home/hri26-group2/ros/devel/lib/hri_study_description/cmake.lock

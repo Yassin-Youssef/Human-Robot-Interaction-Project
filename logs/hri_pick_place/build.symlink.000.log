@@ -1,0 +1,10 @@
+Symlinking /home/hri26-group2/ros/devel/share/hri_pick_place/cmake/hri_pick_placeConfig-version.cmake
+Symlinking /home/hri26-group2/ros/devel/share/hri_pick_place/cmake/hri_pick_placeConfig.cmake
+Symlinking /home/hri26-group2/ros/devel/lib/pkgconfig/hri_pick_place.pc
+Symlinking /home/hri26-group2/ros/devel/lib/python3/dist-packages/hri_pick_place/__init__.py
+Symlinking /home/hri26-group2/ros/devel/lib/hri_pick_place/run_sequence.py
+Symlinking /home/hri26-group2/ros/devel/lib/hri_pick_place/cmake.lock
+Symlinking /home/hri26-group2/ros/devel/lib/hri_pick_place/compute_poses.py
+Symlinking /home/hri26-group2/ros/devel/lib/hri_pick_place/calibrate_table.py
+Symlinking /home/hri26-group2/ros/devel/lib/hri_pick_place/table_frame_publisher.py
+Symlinking /home/hri26-group2/ros/devel/lib/hri_pick_place/scene_setup.py

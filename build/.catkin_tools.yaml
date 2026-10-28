@@ -1,0 +1,6 @@
+devel_space: /home/hri26-group2/ros/devel
+install: false
+install_space: /home/hri26-group2/ros/install
+profile: default
+source_space: /home/hri26-group2/ros/src
+workspace: /home/hri26-group2/ros

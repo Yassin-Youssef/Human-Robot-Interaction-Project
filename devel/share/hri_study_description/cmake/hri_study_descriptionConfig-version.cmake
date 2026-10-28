@@ -1,0 +1,1 @@
+/home/hri26-group2/ros/devel/.private/hri_study_description/share/hri_study_description/cmake/hri_study_descriptionConfig-version.cmake

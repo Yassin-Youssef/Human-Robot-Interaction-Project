@@ -1,0 +1,8 @@
+prefix=/home/hri26-group2/ros/devel/.private/hri_study_description
+
+Name: hri_study_description
+Description: Description of hri_study_description
+Version: 0.1.0
+Cflags: 
+Libs: 
+Requires: 

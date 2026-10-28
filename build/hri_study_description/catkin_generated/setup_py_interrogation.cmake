@@ -1,0 +1,7 @@
+set(hri_study_description_SETUP_PY_SETUP_MODULE "setuptools")
+set(hri_study_description_SETUP_PY_VERSION "0.1.0")
+set(hri_study_description_SETUP_PY_SCRIPTS "")
+set(hri_study_description_SETUP_PY_PACKAGES "hri_study_description")
+set(hri_study_description_SETUP_PY_PACKAGE_DIRS "src/hri_study_description")
+set(hri_study_description_SETUP_PY_MODULES "")
+set(hri_study_description_SETUP_PY_MODULE_DIRS "")

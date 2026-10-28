@@ -1,0 +1,1 @@
+/home/hri26-group2/ros/devel/.private/hri_study_description/lib/python3/dist-packages/hri_study_description/__init__.py

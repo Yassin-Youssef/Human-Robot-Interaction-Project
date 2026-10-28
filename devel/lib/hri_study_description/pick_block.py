@@ -1,0 +1,1 @@
+/home/hri26-group2/ros/devel/.private/hri_study_description/lib/hri_study_description/pick_block.py
