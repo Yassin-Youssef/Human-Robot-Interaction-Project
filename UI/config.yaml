@@ -1,0 +1,37 @@
+# Settings for hri_ui.py
+
+# Participant window fills the whole screen.
+fullscreen: true
+
+# Left edge (in pixels) of the participant monitor in the desktop layout.
+# 0 = main monitor. Example: 1920 if the participant monitor is to the right of a 1920 px wide main monitor.
+participant_monitor_x_offset: 0
+
+# Fake robot delays in seconds (only used with --dry-run).
+fake_robot:
+  pick: 3.0
+  place_decision: 3.0
+  point: 3.0
+  home: 3.0
+
+# Maximum reading time for the statements screen in seconds. null = no limit (Enter only).
+max_reading_time_s: null
+
+font_family: Helvetica
+font_sizes:
+  title: 48
+  text: 40
+  statements: 32
+  counter: 28
+  hint: 18
+  experimenter: 13
+
+# Placeholder. The group writes the final debrief text.
+debrief_text: |
+  Thank you for taking part.
+
+  [PLACEHOLDER, final text to be written by the group]
+  You were told that some advice might not be reliable.
+  In fact, all advice in this study was correct.
+
+  Please do not discuss this study with other participants.

@@ -1,0 +1,18 @@
+{
+  "easy": [
+    "Hexagons go in the blue bowl.",
+    "Red and blue cylinders go in the red bowl.",
+    "Green cylinders go in the blue bowl.",
+    "Red cuboids go in the red bowl.",
+    "Blue cuboids go in the red bowl.",
+    "Green cuboids go in the blue bowl."
+  ],
+  "hard": [
+    "Hexagons that are NOT blue go in the blue bowl.",
+    "Blue hexagons go in the red bowl.",
+    "Cylinders that are NOT green go in the red bowl.",
+    "Green cylinders go in the blue bowl.",
+    "Cuboids that are NOT red go in the red bowl.",
+    "Red cuboids go in the blue bowl."
+  ]
+}
