@@ -1,0 +1,13 @@
+participant,level,question,block,source,advice,correct,chosen,followed_advice,correct_choice,time_s,saved_at
+P01,easy,1,green hexagon,robot,red,red,red,yes,yes,9.153,2026-11-04T16:57:09
+P01,easy,2,green cylinder,screen,blue,blue,blue,yes,yes,1.673,2026-11-04T16:57:09
+P01,easy,3,blue cylinder,screen,blue,blue,blue,yes,yes,2.869,2026-11-04T16:57:09
+P01,easy,4,red cuboid,robot,red,red,red,yes,yes,7.27,2026-11-04T16:57:09
+P01,easy,5,blue hexagon,robot,red,red,red,yes,yes,3.556,2026-11-04T16:57:09
+P01,easy,6,green cuboid,screen,blue,blue,blue,yes,yes,2.063,2026-11-04T16:57:09
+P01,hard,1,blue cylinder,screen,red,red,red,yes,yes,0.851,2026-11-04T16:57:09
+P01,hard,2,red hexagon,robot,blue,blue,blue,yes,yes,2.242,2026-11-04T16:57:09
+P01,hard,3,blue cuboid,robot,blue,blue,blue,yes,yes,6.857,2026-11-04T16:57:09
+P01,hard,4,green cylinder,screen,red,red,red,yes,yes,8.171,2026-11-04T16:57:09
+P01,hard,5,red cylinder,screen,blue,blue,blue,yes,yes,7.845,2026-11-04T16:57:09
+P01,hard,6,blue hexagon,robot,red,red,red,yes,yes,37.756,2026-11-04T16:57:09

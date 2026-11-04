@@ -1,0 +1,13 @@
+Participant,Level,Question,Source,Block in slot,Correct bowl,Advice,Participant chose,Decision time (s)
+P01,easy,1 of 6,robot,green hexagon,red,red,red,5.97
+P01,easy,2 of 6,screen,green cylinder,blue,blue,blue,16.68
+P01,easy,3 of 6,screen,blue cylinder,blue,blue,red,10.11
+P01,easy,4 of 6,robot,red cuboid,red,red,red,10.45
+P01,easy,5 of 6,robot,blue hexagon,red,red,red,4.96
+P01,easy,6 of 6,screen,green cuboid,blue,blue,blue,5.02
+P01,hard,1 of 6,screen,blue cylinder,red,red,red,7.57
+P01,hard,2 of 6,robot,red hexagon,blue,blue,red,8.28
+P01,hard,3 of 6,robot,blue cuboid,blue,blue,blue,5.39
+P01,hard,4 of 6,screen,green cylinder,red,red,red,11.74
+P01,hard,5 of 6,screen,red cylinder,blue,blue,blue,1.18
+P01,hard,6 of 6,robot,blue hexagon,red,red,red,3.81

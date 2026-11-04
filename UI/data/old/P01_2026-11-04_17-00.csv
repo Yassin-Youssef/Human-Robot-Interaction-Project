@@ -1,0 +1,7 @@
+participant,part,level,question,block,source,advice,correct,chosen,followed_advice,correct_choice,time_s,answered_at
+P01,Level 1,easy,1,green hexagon,robot,red,red,red,yes,yes,4.05,17:01:45
+P01,Level 1,easy,2,green cylinder,screen,blue,blue,blue,yes,yes,4.52,17:02:17
+P01,Level 1,easy,3,blue cylinder,screen,blue,blue,blue,yes,yes,5.98,17:02:40
+P01,Level 1,easy,4,red cuboid,robot,red,red,red,yes,yes,4.58,17:03:14
+P01,Level 1,easy,5,blue hexagon,robot,red,red,red,yes,yes,4.34,17:03:53
+P01,Level 1,easy,6,green cuboid,screen,blue,blue,blue,yes,yes,6.04,17:04:23

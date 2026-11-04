@@ -3,5 +3,3 @@ __pycache__/
 ~$*
 results/
 
-# participant data from the UI (never push)
-UI/data/
