@@ -114,6 +114,16 @@ def make_stubs(world):
     rospy.get_param = lambda name, default=None: default
 
     def service_proxy(name, srv_type):
+        if name == "/get_planning_scene":
+            from moveit_msgs.msg import AllowedCollisionMatrix
+            return lambda req: types.SimpleNamespace(
+                scene=types.SimpleNamespace(allowed_collision_matrix=AllowedCollisionMatrix()))
+        if name == "/apply_planning_scene":
+            def apply(diff):
+                world.events_acm = list(zip(diff.allowed_collision_matrix.default_entry_names,
+                                            diff.allowed_collision_matrix.default_entry_values))
+                return types.SimpleNamespace(success=True)
+            return apply
         if name == "/compute_ik":
             return lambda req: types.SimpleNamespace(
                 error_code=types.SimpleNamespace(val=1),
@@ -264,14 +274,14 @@ class FakeStudyRobot(object):
     def pick(self, name):
         self._do("pick " + name)
 
-    def place_decision(self):
-        self._do("place_decision")
+    def place_decision(self, go_home=True):
+        self._do("place_decision" if go_home else "place_decision stay_up")
 
     def home(self):
         self._do("home")
 
-    def push(self, bowl):
-        self._do("push " + bowl)
+    def push(self, bowl, wait_home=True):
+        self._do("push %s%s" % (bowl, "" if wait_home else " home_in_background"))
 
 
 class TestRosRobotAdapter(unittest.TestCase):
@@ -309,7 +319,13 @@ class TestRosRobotAdapter(unittest.TestCase):
         robot, _ = self.make()
         robot.point("red")
         robot.point("blue")
-        self.assertEqual(FakeStudyRobot.calls, ["push red", "push blue"])
+        self.assertEqual(FakeStudyRobot.calls, ["push red home_in_background", "push blue home_in_background"])
+
+    def test_robot_trial_place_stays_up(self):
+        robot, _ = self.make()
+        robot.place_decision(go_home=False)
+        robot.place_decision()
+        self.assertEqual(FakeStudyRobot.calls, ["place_decision stay_up", "place_decision"])
 
     def test_exceptions_propagate(self):
         robot, _ = self.make()
@@ -480,6 +496,10 @@ class TestStudyRobot(unittest.TestCase):
             silent(r.pick, "red cylinder")
         self.assertEqual(self.moves(), [])
 
+    def test_padded_hand_collisions_are_ignored(self):
+        self.make()
+        self.assertEqual(self.world.events_acm, [("panda_hand_sc", True)])
+
     def test_dry_run_plans_but_never_moves(self):
         r = self.make(dry_run=True)
         silent(r.pick, "green hexagon")
@@ -556,6 +576,23 @@ class TestPushRobot(unittest.TestCase):
         self.world.plan_log, self.world.events = [], []
         silent(self.r.push, "blue")
         self.assertEqual(red, (self.world.plan_log, self.moves()))
+
+    def test_place_without_home_for_robot_trials(self):
+        silent(self.r.pick, "blue cylinder")
+        self.world.events = []
+        silent(self.r.place_decision, go_home=False)
+        self.assertEqual(self.moves(), ["execute", "execute", "gripper move", "execute"])   # no home
+
+    def test_push_returns_up_and_home_runs_in_background(self):
+        self.world.moveit_by_name_moves = False      # the arm has not arrived yet
+        silent(self.r.push, "red", wait_home=False)
+        self.assertEqual(self.moves()[-1], "moveit_by_name arm/home")   # sent, not waited for
+        self.assertIsNotNone(self.r.home_started)
+        self.world.joints = list(HOME)                # now it arrives
+        self.world.events = []
+        self.r.home()                                 # only waits, does not send again
+        self.assertEqual(self.moves(), [])
+        self.assertIsNone(self.r.home_started)
 
     def test_bad_bowl_and_held_block_are_refused(self):
         with self.assertRaises(self.robot_mod.RobotError):

@@ -29,7 +29,9 @@ import tf2_ros
 from geometry_msgs.msg import Pose, PoseStamped
 from moveit_msgs.msg import (AttachedCollisionObject, CollisionObject, DisplayTrajectory,
                              MoveItErrorCodes, PositionIKRequest, RobotState)
-from moveit_msgs.srv import GetPositionIK, GetStateValidity, GetStateValidityRequest
+from moveit_msgs.msg import PlanningScene, PlanningSceneComponents
+from moveit_msgs.srv import (ApplyPlanningScene, GetPlanningScene, GetPositionIK, GetStateValidity,
+                             GetStateValidityRequest)
 from shape_msgs.msg import SolidPrimitive
 
 from .layout import Layout, load_config
@@ -70,6 +72,7 @@ class StudyRobot(object):
         self.confirm = self.cfg.get("confirm", True) if confirm is None else confirm
         self.held = None          # (block, finger width, gripper yaw) between pick and place
         self.placed = None        # block last put on the decision spot (for the push)
+        self.home_started = None  # time a move home was sent and not yet arrived
         self._virtual = None      # dry run: planned arm joints instead of the real ones
         c = self.cfg
 
@@ -106,6 +109,7 @@ class StudyRobot(object):
                                        queue_size=1, latch=True)
         self._setup_gripper()
         self._setup_home()
+        self._ignore_collision_links()
 
     # ==== the calls ========================================================================
     def pick(self, name):
@@ -167,8 +171,12 @@ class StudyRobot(object):
         self.held = (b, width, yaw)
         self.execute(up, "lift %s" % b.name)
 
-    def place_decision(self):
-        """Steps 6-9: put the held block on the decision spot, let go, move up, then home()."""
+    def place_decision(self, go_home=True):
+        """Steps 6-9: put the held block on the decision spot, let go, move up, then home().
+
+        go_home=False (robot trials): stay up above the decision spot, so the push can start
+        from there without a trip home in between.
+        """
         if self.held is None:
             raise RobotError("place_decision(): no block in the gripper (call pick first)")
         b, width, _ = self.held
@@ -202,12 +210,13 @@ class StudyRobot(object):
         self.report("place %s on '%s'" % (b.label, p["id"]),
                     [("move above the place spot", to_place), ("straight down", lower),
                      ("open gripper to %.1f cm (let go)" % (open_width * 100), None),
-                     ("straight up", leave), ("home (moveit_by_name)", None)])
+                     ("straight up", leave)] + ([("home (moveit_by_name)", None)] if go_home else []))
         if self.dry_run:
             self._virtual = self.end_joints(leave)
             self.held = None
             self.placed = b
-            self.home()
+            if go_home:
+                self.home()
             return
 
         self.execute(to_place, "move above the place spot")
@@ -218,15 +227,21 @@ class StudyRobot(object):
         self.held = None
         self.placed = b
         self.execute(leave, "straight up from the place spot")
-        self.home()
+        if go_home:
+            self.home()
 
-    def push(self, bowl):
+    def push(self, bowl, wait_home=True):
         """The cue: push the block on the decision spot toward the `bowl` ("red"/"blue") bowl.
 
-        From home: close the gripper, move above the decision spot, straight sideways
+        From where the arm is (home, or above the decision spot after place_decision with
+        go_home=False): close the gripper, move above the decision spot, straight sideways
         start_offset away from the target bowl, straight down, push toward the bowl at
-        push.speed, straight up, home(). Red and blue are mirror images (same distances,
+        push.speed, straight up, then home. Red and blue are mirror images (same distances,
         heights, speed); only the move home starts from the other side.
+
+        wait_home=False (UI): return as soon as the arm is up after the push, while the arm
+        drives home on its own (the decision clock starts then). The next home() call waits
+        until the arm has arrived.
         """
         if self.held is not None:
             raise RobotError("push(%r): still holding %s" % (bowl, self.held[0].name))
@@ -277,7 +292,8 @@ class StudyRobot(object):
                     [("close gripper", None), ("move above the decision spot", to_above),
                      ("sideways %.0f cm" % (pc["start_offset"] * 100), side),
                      ("down, fingertips %.0f cm above the table" % (pc["fingertip_height"] * 100), down),
-                     ("push toward %s" % bowl, push), ("straight up", up), ("home (moveit_by_name)", None)])
+                     ("push toward %s" % bowl, push), ("straight up", up),
+                     ("home (moveit_by_name)%s" % ("" if wait_home else ", not waited for"), None)])
         if self.dry_run:
             self._virtual = self.end_joints(up)
             self.home()
@@ -291,22 +307,23 @@ class StudyRobot(object):
         self.execute(push, "push toward %s" % bowl)
         self.execute(up, "straight up")
         self.placed = None
-        self.home()
+        if wait_home:
+            self.home()
+        else:
+            self.start_home()
 
-    def home(self):
-        """The lab's "Move Home": publish {group, target} on /moveit_by_name, as the script
-        panel button does, then wait until the arm is at the SRDF "home" joints."""
+    def start_home(self):
+        """Send the lab's "Move Home" command (moveit_by_name) without waiting for it."""
         h = self.cfg["home"]
         if self.dry_run:
             print("[dry run] home: publish {group: %s, target: %s} on /moveit_by_name"
                   % (h["group"], h["target"]))
             self._virtual = None
             return
-        if self.at_home():
-            rospy.loginfo("home: already there")
+        if self.home_started is not None or self.at_home():
             return
         self.ask("home (moveit_by_name)")
-        if self.sim:
+        if self.sim:   # no background move in the simulation: just go home
             self.arm.set_named_target(h["target"])
             ok = self.arm.go(wait=True)
             self.arm.stop()
@@ -317,12 +334,31 @@ class StudyRobot(object):
             raise RobotError("home: no moveit_by_name node listening (is robot.launch running?)")
         from moveit_by_name.msg import Command
         self.home_pub.publish(Command(group=h["group"], target=h["target"]))
-        deadline = time.time() + h["timeout"]
+        self.home_started = time.time()
+
+    def home(self):
+        """The lab's "Move Home": publish {group, target} on /moveit_by_name, as the script
+        panel button does, then wait until the arm is at the SRDF "home" joints. If a move
+        home is already under way (push with wait_home=False), only wait for it."""
+        h = self.cfg["home"]
+        if self.dry_run:
+            self.start_home()
+            return
+        if self.at_home():
+            self.home_started = None
+            rospy.loginfo("home: already there")
+            return
+        self.start_home()
+        if self.sim:
+            return
+        deadline = self.home_started + h["timeout"]
         while time.time() < deadline and not rospy.is_shutdown():
             rospy.sleep(0.2)
             if self.at_home():
                 rospy.sleep(0.5)   # let the arm settle
+                self.home_started = None
                 return
+        self.home_started = None
         raise RobotError("home: arm not at '%s' after %.0f s (moveit_by_name failed or stopped)"
                          % (h["target"], h["timeout"]))
 
@@ -375,6 +411,34 @@ class StudyRobot(object):
         tol = self.cfg["home"]["tolerance"]
         now = self.arm.get_current_joint_values()
         return max(abs(a - b) for a, b in zip(now, self.home_joints)) < tol
+
+    def _ignore_collision_links(self):
+        """Tell MoveIt to ignore collisions of the links in ignore_collision_links (pick.yaml).
+
+        The lab's MoveIt config of 2026-11-03 no longer ignores panda_hand_sc, the hand
+        padded 2 cm. Then a held block and the neighbor blocks always "collide" with the
+        padded hand and every lift fails. Ignoring it again restores the behavior from before
+        that update; the real hand, fingers and fingertips are still checked. Only changes
+        MoveIt's planning scene while move_group runs, not the lab's files.
+        """
+        links = self.cfg.get("ignore_collision_links") or []
+        if not links:
+            return
+        for srv in ("/get_planning_scene", "/apply_planning_scene"):
+            rospy.wait_for_service(srv, 10.0)
+        get = rospy.ServiceProxy("/get_planning_scene", GetPlanningScene)
+        acm = get(PlanningSceneComponents(
+            components=PlanningSceneComponents.ALLOWED_COLLISION_MATRIX)).scene.allowed_collision_matrix
+        for link in links:
+            if link in acm.default_entry_names:
+                acm.default_entry_values[acm.default_entry_names.index(link)] = True
+            else:
+                acm.default_entry_names.append(link)
+                acm.default_entry_values.append(True)
+        diff = PlanningScene(is_diff=True, allowed_collision_matrix=acm)
+        if not rospy.ServiceProxy("/apply_planning_scene", ApplyPlanningScene)(diff).success:
+            raise RobotError("could not tell MoveIt to ignore %s" % ", ".join(links))
+        rospy.loginfo("MoveIt ignores collisions of: %s", ", ".join(links))
 
     def _setup_home(self):
         h = self.cfg["home"]

@@ -5,7 +5,8 @@ Participant window: fullscreen, the participant only presses Enter.
 Experimenter window: read-only, shows the current trial and the decision times.
 Space = continue, Escape = quit (both work in either window).
 Decision time = advice fully shown (screen text, or robot holding the point) until Enter.
-Times are shown in the experimenter window and printed in the terminal; nothing is saved to disk.
+Times are shown in the experimenter window and printed in the terminal. The experimenter clicks
+the bowl the participant chose; every block is saved to data/<participant>_<date>.csv.
 
     python hri_ui.py --participant P07 --dry-run
 """
@@ -15,9 +16,12 @@ sys.dont_write_bytecode = True  # write nothing to disk, not even __pycache__
 
 import argparse
 import csv
+import datetime
+import glob
 import json
 import math
 import os
+import shutil
 import threading
 import time
 import tkinter as tk
@@ -29,8 +33,21 @@ import yaml
 from robot_interface import BLOCKS, BOWLS, FakeRobot, RosRobot
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LEVELS = ["easy", "hard"]
-QUESTIONS_PER_LEVEL = 6
+DATA_DIR = os.path.join(HERE, "data")   # one CSV per participant session, kept off GitHub
+# Saved columns: the same fields, labels and order as the experimenter window.
+DATA_COLUMNS = [("participant", "Participant"), ("level", "Level"), ("question", "Question"),
+                ("source", "Source"), ("block", "Block in slot"), ("correct", "Correct bowl"),
+                ("advice", "Advice"), ("chosen", "Participant chose"), ("time_s", "Decision time (s)")]
+# Session order. Ids as in sequences.csv and statements.json; labels, block counts and
+# reading times come from `levels` in config.yaml. "practice" is skipped (with a notice)
+# when sequences.csv has no practice rows for the participant.
+LEVELS = ["practice", "easy", "hard"]
+DEFAULT_LEVELS = {
+    "practice": {"label": "Practice round", "questions": 3, "reading_time_s": None},
+    "easy": {"label": "Level 1", "questions": 6, "reading_time_s": 30},
+    "hard": {"label": "Level 2", "questions": 6, "reading_time_s": 15},
+}
+QUESTIONS_PER_LEVEL = 6   # largest level, for --start-question
 SOURCES = ("robot", "screen")
 # Friendly theme: soft lavender background, content on a white rounded card.
 BG = "#E9E3F7"        # lavender background
@@ -45,7 +62,7 @@ DEFAULT_CONFIG = {
     "fullscreen": True,
     "participant_monitor_x_offset": 0,
     "fake_robot": {"pick": 3.0, "place_decision": 3.0, "point": 3.0, "home": 3.0},
-    "max_reading_time_s": None,
+    "levels": DEFAULT_LEVELS,
     "font_family": "Helvetica",
     "font_sizes": {"title": 48, "text": 40, "statements": 32, "counter": 28, "hint": 18, "experimenter": 13},
     "debrief_text": "Thank you for taking part.",
@@ -73,7 +90,7 @@ EXPERIMENTER_FIELDS = [
     ("block", "Block in slot"),
     ("correct", "Correct bowl"),
     ("advice", "Advice"),
-    ("rated_first", "Rated first"),
+    ("chosen", "Participant chose"),
     ("step", "Step"),
     ("timer", "Decision time"),
 ]
@@ -114,7 +131,12 @@ def load_config(path):
         user = yaml.safe_load(f) or {}
     config = dict(DEFAULT_CONFIG)
     for key, value in user.items():
-        if isinstance(value, dict) and isinstance(config.get(key), dict):
+        if key == "levels" and isinstance(value, dict):
+            merged = {lv: dict(spec) for lv, spec in DEFAULT_LEVELS.items()}
+            for lv, spec in value.items():
+                merged.setdefault(lv, {}).update(spec or {})
+            config[key] = merged
+        elif isinstance(value, dict) and isinstance(config.get(key), dict):
             merged = dict(config[key])
             merged.update(value)
             config[key] = merged
@@ -123,8 +145,11 @@ def load_config(path):
     return config
 
 
-def load_trials(path, participant):
-    """Return {level: [row, ...]} for one participant, sorted by question."""
+def load_trials(path, participant, levels=DEFAULT_LEVELS):
+    """Return {level: [row, ...]} for one participant, sorted by question.
+
+    The practice level is optional: without practice rows it is left out (with a notice).
+    """
     if not os.path.isfile(path):
         fail("sequences file not found: %s" % path)
     with open(path, newline="", encoding="utf-8") as f:
@@ -138,9 +163,13 @@ def load_trials(path, participant):
     trials = {}
     for level in LEVELS:
         level_rows = sorted([r for r in mine if r["level"] == level], key=lambda r: int(r["question"]))
+        if not level_rows and level == "practice":
+            print("Note: no practice rows for %s in %s, the practice round is skipped." % (participant, path))
+            continue
+        n = int(levels[level]["questions"])
         questions = [int(r["question"]) for r in level_rows]
-        if questions != list(range(1, QUESTIONS_PER_LEVEL + 1)):
-            fail("%s %s: expected questions 1-%d, found %s" % (participant, level, QUESTIONS_PER_LEVEL, questions))
+        if questions != list(range(1, n + 1)):
+            fail("%s %s: expected questions 1-%d, found %s" % (participant, level, n, questions))
         for r in level_rows:
             where = "%s %s question %s" % (participant, level, r["question"])
             if r["block"] not in BLOCKS:
@@ -149,8 +178,6 @@ def load_trials(path, participant):
                 fail("%s: source must be robot or screen, found %r" % (where, r["source"]))
             if r["advice"] not in BOWLS or r["correct"] not in BOWLS:
                 fail("%s: advice and correct must be red or blue" % where)
-            if r["rated_first"] not in SOURCES:
-                fail("%s: rated_first must be robot or screen, found %r" % (where, r["rated_first"]))
         trials[level] = level_rows
     return trials
 
@@ -160,9 +187,9 @@ def load_statements(path, trials):
         fail("statements file not found: %s" % path)
     with open(path, encoding="utf-8") as f:
         statements = json.load(f)
-    for level in LEVELS:
-        if len(statements.get(level, [])) != QUESTIONS_PER_LEVEL:
-            fail("statements.json: expected %d statements for %s" % (QUESTIONS_PER_LEVEL, level))
+    for level in trials:
+        if not statements.get(level):
+            fail("statements.json: no statements for %s" % level)
         for r in trials[level]:
             if r["statement"] not in statements[level]:
                 fail("sequences and statements.json do not match: %r" % r["statement"])
@@ -171,14 +198,17 @@ def load_statements(path, trials):
 
 class App(object):
     def __init__(self, root, participant, trials, statements, config, robot,
-                 start_level="easy", start_question=1):
+                 start_level=None, start_question=1):
         self.root = root  # the experimenter window
         self.participant = participant
         self.trials = trials
         self.statements = statements
         self.config = config
         self.robot = robot
-        self.level_index = LEVELS.index(start_level)
+        self.levels = [lv for lv in LEVELS if lv in trials]
+        if start_level is None or start_level not in self.levels:
+            start_level = self.levels[0]
+        self.level_index = self.levels.index(start_level)
         self.question = start_question
         self.state = "waiting"
         self.busy = False  # True while a robot call runs; Enter and Space are ignored
@@ -189,6 +219,16 @@ class App(object):
         self.advice_start = None  # stopwatch start (time.monotonic) while advice is shown
         self.times = []  # (level, question, source, block, advice, seconds)
         self.summary_printed = False
+        self.records = []         # one dict per block whose advice was shown
+        self.pending = None       # record of the current block until the next block starts
+        self.dry = isinstance(robot, FakeRobot) or getattr(robot, "dry_run", False)
+        stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.data_path = os.path.join(DATA_DIR, "%s%s_%s.csv" % ("DRYRUN_" if self.dry else "", participant, stamp))
+        # Started from the beginning: older files of this participant move to data/old/ at the
+        # first save. Resumed (--start-level / --start-question): continue in the latest file.
+        self.archive_pending = self.level_index == 0 and start_question == 1
+        if not self.archive_pending:
+            self.resume_from_file(start_question)
         self.last_printed = ""
 
         self._build_experimenter()
@@ -248,10 +288,10 @@ class App(object):
             self.labels[name] = label
         self.labels["statements"].configure(justify="left")
         self.colors = {name: FG for name in self.labels}
-        self.colors.update(hint=MUTED, title=ACCENT, counter=ACCENT)
+        self.colors.update(hint=MUTED, title=ACCENT, counter=ACCENT, countdown=ACCENT)
         for name, label in self.labels.items():
             label.configure(fg=self.colors[name])
-        for name in ("title", "counter"):
+        for name in ("title", "counter", "countdown"):
             self.labels[name].configure(font=self.font(dict((n, k) for n, k, _, _ in LAYOUT)[name], "bold"))
         self.advice_text = ""   # screen advice drawn on the canvas (two colors), for screen_text()
 
@@ -278,6 +318,24 @@ class App(object):
         self.continue_button.pack(side="left")
         tk.Button(buttons, text="Quit (Esc)", font=self.font("experimenter"), takefocus=0,
                   command=self.on_escape).pack(side="left", padx=(10, 0))
+        # Ends the current part (practice, Level 1 or Level 2) at once; only when the robot is still.
+        self.skip_button = tk.Button(buttons, text="Skip level", font=self.font("experimenter"), takefocus=0,
+                                     command=self.on_skip)
+        self.skip_button.pack(side="left", padx=(10, 0))
+        # The bowl the participant chose. Must be clicked before the next block can start.
+        choice = tk.Frame(r)
+        choice.grid(row=len(EXPERIMENTER_FIELDS) + 4, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 4))
+        tk.Label(choice, text="Participant chose:", font=self.font("experimenter", "bold")).pack(side="left")
+        self.choice_buttons = []
+        for bowl, color in (("red", "#D64545"), ("blue", "#3B6FD8")):
+            b = tk.Button(choice, text="%s bowl" % bowl.capitalize(), font=self.font("experimenter", "bold"),
+                          fg="white", bg=color, activebackground=color, takefocus=0,
+                          command=lambda bowl=bowl: self.on_choice(bowl))
+            b.pack(side="left", padx=(8, 0))
+            self.choice_buttons.append(b)
+        self.undo_button = tk.Button(choice, text="Undo choice", font=self.font("experimenter"), takefocus=0,
+                                     command=lambda: self.on_choice(None))
+        self.undo_button.pack(side="left", padx=(8, 0))
         tk.Label(r, text="Decision times (advice shown -> Enter):", font=self.font("experimenter", "bold"),
                  anchor="w").grid(row=len(EXPERIMENTER_FIELDS) + 2, column=0, columnspan=2,
                                   sticky="w", padx=10, pady=(8, 0))
@@ -349,7 +407,7 @@ class App(object):
         rounded(0, 0, CARD)
 
     def draw_advice_text(self, cx, cy, bowl):
-        """'Screen recommends: ' in dark gray and the bowl word in the bowl color, centered."""
+        """'System recommends: ' in dark gray and the bowl word in the bowl color, centered."""
         head, word = self.advice_text.rsplit(" ", 1)
         font = tkfont.Font(font=self.font("text"))
         bold = tkfont.Font(font=self.font("text", "bold"))
@@ -361,7 +419,7 @@ class App(object):
         self.fade_items += [(a, {"fill": FG}), (b, {"fill": BOWL_COLORS[bowl][0]})]
 
     def draw_progress(self, w, h):
-        n, r, gap = QUESTIONS_PER_LEVEL, h * 0.011, h * 0.045
+        n, r, gap = self.n_questions(), h * 0.011, h * 0.045
         counter = self.labels["counter"]
         y = counter.winfo_y() + counter.winfo_reqheight() + r * 2.5     # just below the counter line
         x0 = w * 0.5 - gap * (n - 1) / 2
@@ -464,12 +522,12 @@ class App(object):
         values = {
             "participant": self.participant,
             "level": self.level,
-            "question": "%d of %d" % (self.question, QUESTIONS_PER_LEVEL),
+            "question": "%d of %d" % (self.question, self.n_questions()),
             "source": t["source"],
             "block": t["block"],
             "correct": t["correct"],
             "advice": t["advice"],
-            "rated_first": t["rated_first"],
+            "chosen": self.choice_text(),
             "step": step,
             "timer": self.timer_text(),
         }
@@ -481,18 +539,31 @@ class App(object):
         reminder = ""
         if self.state == "waiting":
             reminder = "Press Space to start."
+        elif self.state == "level_complete" and self.level == "practice":
+            reminder = ("Practice done. Reload the blocks, answer the participant's questions, "
+                        "then press Space to start %s" % self.spec(self.levels[self.level_index + 1])["label"])
         elif self.state == "level_complete":
-            if self.level_index + 1 < len(LEVELS):
-                reminder = ("Reload the blocks, ask the trust ratings out loud (rated first: %s), "
-                            "then press Space" % t["rated_first"])
+            if self.choice_missing():
+                print("[UI] Click the bowl the participant chose first (Red bowl or Blue bowl).")
+                return
+            self.pending = None
+            if self.level_index + 1 < len(self.levels):
+                reminder = "Reload the blocks, ask the trust ratings out loud, then press Space"
             else:
-                reminder = ("Ask the trust ratings out loud (rated first: %s), "
-                            "then press Space for the debrief" % t["rated_first"])
+                reminder = "Ask the trust ratings out loud, then press Space for the debrief"
         elif self.state == "debrief":
             reminder = "Session finished. Press Escape to quit."
         self.exp_reminder.configure(text=reminder)
         can_continue = self.state in ("waiting", "level_complete") and not self.busy
         self.continue_button.configure(state="normal" if can_continue else "disabled")
+        can_choose = self.pending is not None and self.robot_error is None
+        for b in self.choice_buttons + [self.undo_button]:
+            b.configure(state="normal" if can_choose else "disabled")
+        if self.choice_missing() and self.state in ("idle", "level_complete"):
+            reminder = "Click the bowl the participant chose first (Red bowl or Blue bowl). " + reminder
+            self.exp_reminder.configure(text=reminder)
+        can_skip = self.state in ("statements", "idle", "advice") and not self.busy and self.robot_error is None
+        self.skip_button.configure(state="normal" if can_skip else "disabled")
         if can_continue and reminder != self.last_printed:
             print("[UI] " + reminder.replace("press Space", "press Space or click Continue")
                   .replace("Press Space", "Press Space or click Continue"))
@@ -502,13 +573,19 @@ class App(object):
 
     @property
     def level(self):
-        return LEVELS[self.level_index]
+        return self.levels[self.level_index]
+
+    def spec(self, level=None):
+        return self.config["levels"][level or self.level]
+
+    def n_questions(self):
+        return int(self.spec()["questions"])
 
     def trial(self):
         return self.trials[self.level][self.question - 1]
 
     def counter_text(self):
-        return "Level %d  \u00b7  Block %d of %d" % (self.level_index + 1, self.question, QUESTIONS_PER_LEVEL)
+        return "%s  \u00b7  Block %d of %d" % (self.spec()["label"], self.question, self.n_questions())
 
     # ---------- stopwatch ----------
 
@@ -532,6 +609,9 @@ class App(object):
         t = self.trial()
         row = (self.level, self.question, t["source"], t["block"], t["advice"], seconds)
         self.times.append(row)
+        if self.pending is not None:
+            self.pending["time_s"] = round(seconds, 3)
+            self.save()
         print("Decision time: " + format_time_row(row))
 
     def timer_text(self):
@@ -555,6 +635,10 @@ class App(object):
         if self.busy:
             return
         if self.state in ("statements", "idle"):
+            if self.choice_missing():
+                print("[UI] Click the bowl the participant chose first (Red bowl or Blue bowl).")
+                return
+            self.pending = None
             self.start_question()
         elif self.state == "advice":
             if self.advice_start is None:
@@ -568,12 +652,145 @@ class App(object):
         if self.state == "waiting":
             self.start_level()
         elif self.state == "level_complete":
-            if self.level_index + 1 < len(LEVELS):
+            if self.level_index + 1 < len(self.levels):
                 self.level_index += 1
                 self.question = 1
                 self.start_level()
             else:
                 self.show_debrief()
+
+    def choice_missing(self):
+        return self.pending is not None and self.pending["chosen"] is None
+
+    def choice_text(self):
+        if self.pending is None:
+            return "-"
+        return self.pending["chosen"] or "(click Red bowl or Blue bowl)"
+
+    def on_choice(self, bowl):
+        """bowl = "red"/"blue" from the buttons, None = Undo."""
+        if self.pending is None:
+            return
+        self.pending["chosen"] = bowl
+        print("[UI] %s Q%d %s: participant chose %s" % (self.pending["level"], self.pending["question"],
+                                                       self.pending["block"], bowl or "(undone)"))
+        self.save()
+        self.update_experimenter()
+
+    def session_files(self):
+        """This participant's data files (dry runs and real sessions are kept apart)."""
+        prefix = ("DRYRUN_" if self.dry else "") + self.participant + "_"
+        return sorted(p for p in glob.glob(os.path.join(DATA_DIR, prefix + "*"))
+                      if os.path.isfile(p) and not p.endswith(".tmp") and ".tmp." not in p)
+
+    def resume_from_file(self, start_question):
+        """Keep the blocks before the resume point from the latest file and continue in it."""
+        files = [p for p in self.session_files() if p.endswith(".csv")]
+        if not files:
+            return
+        self.data_path = files[-1]
+        order = {lv: i for i, lv in enumerate(self.levels)}
+        keys = {label: key for key, label in DATA_COLUMNS}
+        with open(self.data_path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                r = {keys.get(k, k): v for k, v in row.items()}
+                if "question" not in r or not r["question"]:
+                    continue
+                r["question"] = int(str(r["question"]).split()[0])   # "3 of 6" -> 3
+                if r.get("level") not in order or (order[r["level"]], r["question"]) >= (self.level_index, start_question):
+                    continue   # this block is run again now
+                r["time_s"] = float(r["time_s"]) if r.get("time_s") else None
+                self.records.append(r)
+        print("[UI] Resuming: continuing in %s (%d earlier blocks kept)"
+              % (os.path.basename(self.data_path), len(self.records)))
+
+    def archive_old_files(self):
+        """Move this participant's older files to data/old/ (never deletes anything)."""
+        mine = os.path.splitext(self.data_path)[0]
+        old = [p for p in self.session_files() if os.path.splitext(p)[0] != mine]
+        if not old:
+            return
+        old_dir = os.path.join(DATA_DIR, "old")
+        os.makedirs(old_dir, exist_ok=True)
+        for p in old:
+            target, n = os.path.join(old_dir, os.path.basename(p)), 1
+            while os.path.exists(target):
+                root, ext = os.path.splitext(os.path.basename(p))
+                target, n = os.path.join(old_dir, "%s_%d%s" % (root, n, ext)), n + 1
+            shutil.move(p, target)
+        print("[UI] Started %s again: %d older file(s) moved to data/old/" % (self.participant, len(old)))
+
+    def data_rows(self):
+        """One row per answered block, values as shown in the experimenter window."""
+        rows = []
+        for r in self.records:
+            if r["chosen"] is None:
+                continue
+            row = {key: r.get(key, "") for key, _ in DATA_COLUMNS}
+            row["question"] = "%d of %d" % (int(r["question"]), int(self.spec(r["level"])["questions"]))
+            row["time_s"] = "" if r["time_s"] is None else round(r["time_s"], 2)
+            rows.append(row)
+        return rows
+
+    def save(self):
+        """Write every answered block to data/ as CSV and Excel, rewritten after every choice
+        through a temporary file, so a crash never leaves a half-written file."""
+        rows = self.data_rows()
+        if not rows:
+            return
+        os.makedirs(DATA_DIR, exist_ok=True)
+        if self.archive_pending:
+            self.archive_pending = False
+            self.archive_old_files()
+        tmp = self.data_path + ".tmp"
+        with open(tmp, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow([label for _, label in DATA_COLUMNS])
+            for row in rows:
+                w.writerow([row[key] for key, _ in DATA_COLUMNS])
+        os.replace(tmp, self.data_path)
+        try:
+            self.save_excel(rows)
+        except Exception as e:   # the CSV is the main record; never stop the session for Excel
+            print("[UI] Excel file not written (%s); the CSV is saved." % e, file=sys.stderr)
+
+    def save_excel(self, rows):
+        """The same table as the CSV, with a bold header row."""
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Data"
+        ws.append([label for _, label in DATA_COLUMNS])
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for row in rows:
+            ws.append([row[key] for key, _ in DATA_COLUMNS])
+        for col, (_, label) in enumerate(DATA_COLUMNS):
+            ws.column_dimensions[chr(65 + col)].width = max(12, len(label) + 4)
+        ws.freeze_panes = "A2"
+        path = os.path.splitext(self.data_path)[0] + ".xlsx"
+        tmp = path + ".tmp.xlsx"
+        wb.save(tmp)
+        os.replace(tmp, path)
+
+    def on_skip(self):
+        """Skip the rest of the current level: go straight to its end screen."""
+        if self.busy or self.state not in ("statements", "idle", "advice"):
+            return
+        label = self.spec()["label"]
+        if not messagebox.askyesno("Skip", "Skip the rest of %s?" % label, parent=self.root):
+            return
+        if self.countdown_job is not None:
+            self.root.after_cancel(self.countdown_job)
+            self.countdown_job = None
+        self.advice_start = None   # the current decision is not timed
+        if self.choice_missing():   # skipped before a choice: not saved
+            self.records.remove(self.pending)
+            self.pending = None
+        self.pointing = False      # the push cue already ends with the arm at home
+        print("[UI] Skipped the rest of %s at block %d of %d" % (label, self.question, self.n_questions()))
+        self.show_level_complete()
 
     def on_escape(self, event=None):
         # Ask on top of the window that got the key, so the dialog is never hidden.
@@ -600,7 +817,7 @@ class App(object):
         lines = ["%d. %s" % (i + 1, s) for i, s in enumerate(self.statements[self.level])]
         self.set_screen(title="Sorting rules", statements="\n".join(lines),
                         prompt="Press Enter when you are ready")
-        limit = self.config.get("max_reading_time_s")
+        limit = self.spec().get("reading_time_s")   # None = unlimited (Enter only)
         if limit:
             self.remaining = int(limit)
             self._countdown()
@@ -612,7 +829,9 @@ class App(object):
             self.countdown_job = None
             self.start_question()
             return
-        self.labels["countdown"].configure(text="Time left: %d s" % self.remaining)
+        label = self.labels["countdown"]
+        label.configure(text="Time left: %d s" % self.remaining)
+        label.place(**label.place_info_saved)   # it was hidden while empty
         self.remaining -= 1
         self.countdown_job = self.root.after(1000, self._countdown)
 
@@ -627,15 +846,21 @@ class App(object):
         self.state = "presenting"
         self.set_screen(icon="loading", progress=True, counter=self.counter_text(),
                         status="Robot presenting the block to you")
-        self.run_robot([("pick", self.trial()["block"]), ("place_decision",)], self.show_advice)
+        t = self.trial()
+        # Robot trials: the arm stays up after placing and the push starts from there.
+        self.run_robot([("pick", t["block"]), ("place_decision", t["source"] == "screen")], self.show_advice)
 
     def show_advice(self):
         self.state = "advice"
         t = self.trial()
+        self.pending = {"participant": self.participant, "level": self.level, "question": self.question,
+                        "block": t["block"], "source": t["source"], "advice": t["advice"],
+                        "correct": t["correct"], "chosen": None, "time_s": None}
+        self.records.append(self.pending)
         # Both sources get an icon of the same size, style and gray color in the same place.
         if t["source"] == "screen":
             self.set_screen(icon="bowl", bowl=t["advice"], progress=True, counter=self.counter_text(),
-                            advice="Screen recommends: %s" % t["advice"].upper())
+                            advice="System recommends: %s" % t["advice"].upper())
             # The stopwatch starts once the advice is fully faded in.
             self.root.after(self.fade_ms(), self.start_stopwatch)
         else:
@@ -658,7 +883,7 @@ class App(object):
         self.next_question()
 
     def next_question(self):
-        if self.question < QUESTIONS_PER_LEVEL:
+        if self.question < self.n_questions():
             self.question += 1
             self.show_idle()
         else:
@@ -666,7 +891,11 @@ class App(object):
 
     def show_level_complete(self):
         self.state = "level_complete"
-        if self.level_index == len(LEVELS) - 1:
+        if self.level == "practice":
+            self.set_screen(status="Practice complete. Please wait.",
+                            hint="Experimenter: press Space to start %s"
+                                 % self.spec(self.levels[self.level_index + 1])["label"])
+        elif self.level_index == len(self.levels) - 1:
             self.set_screen(status="Thank you. Please wait.",
                             hint="Experimenter: press Space for the debrief")
         else:
@@ -720,7 +949,8 @@ def main(argv=None):
                         help="real robot adapter, but only print each call; sends nothing, needs no ROS")
     parser.add_argument("--sequences", default=os.path.join(HERE, "sequences.csv"))
     parser.add_argument("--config", default=os.path.join(HERE, "config.yaml"))
-    parser.add_argument("--start-level", choices=LEVELS, default="easy")
+    parser.add_argument("--start-level", choices=LEVELS, default=None,
+                        help="level to start at (default: the first one, practice if it exists)")
     parser.add_argument("--start-question", type=int, default=1,
                         help="question to resume at (1-%d)" % QUESTIONS_PER_LEVEL)
     args = parser.parse_args(argv)
@@ -731,7 +961,7 @@ def main(argv=None):
 
     participant = args.participant.strip().upper()
     config = load_config(args.config)
-    trials = load_trials(args.sequences, participant)
+    trials = load_trials(args.sequences, participant, config["levels"])
     statements_path = os.path.join(os.path.dirname(os.path.abspath(args.sequences)), "statements.json")
     statements = load_statements(statements_path, trials)
 

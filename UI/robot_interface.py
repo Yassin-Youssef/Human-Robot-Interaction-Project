@@ -43,8 +43,9 @@ class FakeRobot(object):
         check_block(block_name)
         self._do("pick", "pick '%s' from its slot" % block_name)
 
-    def place_decision(self):
-        self._do("place_decision", "place the block in the decision area")
+    def place_decision(self, go_home=True):
+        self._do("place_decision", "place the block in the decision area%s"
+                 % (", then home" if go_home else ", stay up (robot trial)"))
 
     def point(self, bowl):
         check_bowl(bowl)
@@ -111,26 +112,29 @@ class RosRobot(object):
                                      "straight down, grasp, straight up" % (block_name, b.id, b.x, b.y))
         self._robot.pick(block_name)
 
-    def place_decision(self):
+    def place_decision(self, go_home=True):
+        """go_home=False on robot trials: the arm stays up and the push starts from there."""
         if self.dry_run:
             p = self.layout.place("decision")
             return self._dry("place_decision", "place on 'decision' (x %.3f, y %.3f): move above, straight "
-                                               "down, let go, straight up, home" % (p["x"], p["y"]))
-        self._robot.place_decision()
+                                               "down, let go, straight up%s"
+                             % (p["x"], p["y"], ", home" if go_home else ", stay up"))
+        self._robot.place_decision(go_home=go_home)
 
     def point(self, bowl):
-        """The cue: push the block on the decision spot toward the bowl, then home.
-        Returns once the arm is back home (the UI starts the decision clock then)."""
+        """The cue: push the block on the decision spot toward the bowl.
+        Returns once the arm is up after the push (the UI starts the decision clock then);
+        the arm drives home by itself meanwhile, and home() waits until it is there."""
         check_bowl(bowl)
         if self.dry_run:
             from hri_study_description.layout import load_config
             g = self.layout.push_plan(bowl, load_config("pick.yaml")["push"])
             return self._dry("point", "push toward %s: block %.1f cm from x %.3f y %.3f to x %.3f y %.3f, "
-                                      "gripper %.1f cm at %.1f cm/s (%.1f s), then home"
+                                      "gripper %.1f cm at %.1f cm/s (%.1f s), up, home in the background"
                                       % (bowl, g["length"] * 100, g["decision"][0], g["decision"][1],
                                          g["block_end"][0], g["block_end"][1], g["travel"] * 100,
                                          g["travel"] / g["seconds"] * 100, g["seconds"]))
-        self._robot.push(bowl)
+        self._robot.push(bowl, wait_home=False)
 
     def home(self):
         if self.dry_run:

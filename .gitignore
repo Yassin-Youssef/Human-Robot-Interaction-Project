@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 ~$*
 results/
+
+# participant data from the UI (never push)
+UI/data/

@@ -26,6 +26,12 @@ gripper_group: gripper       # MoveIt group of the fingers, only used with --sim
 finger_joint: panda_finger_joint1   # each finger moves half of the total opening
 table_frame: table_corner    # frame of the block positions (urdf/study_setup.urdf.xacro)
 
+# Links whose collisions MoveIt ignores. panda_hand_sc is the hand padded 2 cm; the lab's
+# MoveIt config of 2026-11-03 started checking it, so every lift failed (the held block sits
+# inside the padding). Ignoring it restores the behavior from before; the real hand, fingers
+# and fingertips are still checked. Empty list = keep the lab's setting.
+ignore_collision_links: [panda_hand_sc]
+
 # Links allowed to touch the held block: hand, fingers, the lab's fingertips, and the
 # URDF table (the block still rests on it when the lift starts).
 touch_links: [panda_hand, panda_leftfinger, panda_rightfinger, panda_lefttip_body, panda_righttip_body, table]

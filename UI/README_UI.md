@@ -59,7 +59,7 @@ Flow:
    1. Idle: "Press Enter for the next block". Enter starts the question. (First question of a level starts right after the statements screen, no second Enter.)
    2. Status: "Robot presenting the block to you". The UI calls `pick(block)`, then `place_decision()`.
    3. Advice. Same position and same text style on both sources, so only the wording differs:
-      - screen trial: "Screen recommends: RED" or "Screen recommends: BLUE" (from the advice column). The robot does nothing here (it stays at home).
+      - screen trial: "System recommends: RED" or "System recommends: BLUE" (from the advice column). The robot does nothing here (it stays at home).
       - robot trial: "Robot giving advice". The UI calls `point(advice)`, then the arm holds the pose. The advice region never shows RED or BLUE on robot trials.
    4. The advice stays on screen (or the arm keeps pointing) until the participant presses Enter. Enter then calls `home()` if the arm was pointing and starts the next question. Enter works at any time, also during the status line (it just skips ahead after the robot call finishes; ignore Enter while a robot call is running).
    5. After question 6 Enter leads to the end of the level.
@@ -121,9 +121,31 @@ Practice trials, consent form text, final debrief text, the Excel data-entry tem
   no animation" in section 5): lavender background with the content on a white rounded card, Quicksand
   rounded font, purple headings, progress dots with "Level 1 · Block 3 of 6" (levels shown as 1 and 2
   instead of easy and hard), a moving robot drawing while the robot presents the block or returns home,
-  and short fade-ins. Screen trials show a red or blue bowl in the advised color and "Screen recommends:"
+  and short fade-ins. Screen trials show a red or blue bowl in the advised color and "System recommends:"
   with the word RED or BLUE in that color. Robot trials show a purple robot-arm drawing and "Robot giving
   advice" (no bowl color; the robot's push shows the bowl). Note for the group: the colored bowl and word
   make the screen advice more eye-catching than the robot cue, which can affect the robot vs screen
   comparison. On screen trials the decision clock starts after the 0.25 s fade. `animations: false` in
   `config.yaml` restores plain text.
+- Session structure (added on request, overrides the 2 x 6 design in section 2): practice round (3 blocks,
+  2 to 3 statements, no time limit, Enter starts), then Level 1 (6 blocks, 4 statements, 30 s reading time
+  with countdown) and Level 2 (6 blocks, 4 statements of the same difficulty, 15 s). Set in `levels` in
+  `config.yaml`. sequences.csv uses the level ids practice, easy and hard; statements.json the same keys.
+  Practice rows need no rated_first. Without practice rows the practice round is skipped with a notice.
+  After the practice there are no trust ratings. Questions (design v3) are in make_sequences.py: same blocks
+  and order for everyone, advice always correct, robot and screen swapped in every row for a random half of
+  the participants (seed 2026). Reading times 40 s (Level 1) and 20 s (Level 2), to adjust after the pilot.
+  rated_first stays in sequences.csv for the data sheet but is not shown in the UI.
+- Data saving (added on request, overrides "nothing is written to disk"): after each block the experimenter
+  clicks "Red bowl" or "Blue bowl" (what the participant chose; "Undo choice" clears it). The next block or
+  level only starts after a choice. Every block is saved to `data/<participant>_<date>_<time>.csv`
+  (dry runs: `data/DRYRUN_...`), plus the same table as .xlsx. The columns are exactly the fields of the
+  experimenter window: Participant, Level, Question, Source, Block in slot, Correct bowl, Advice,
+  Participant chose, Decision time (s). The file is rewritten after every choice, so nothing is lost on a crash. `UI/data/` is in
+  .gitignore, participant data is never pushed. The reading countdown (Level 1 and 2) is shown in purple.
+- Robot trials: after placing, the arm stays up and pushes from there (no trip home in between); the
+  decision clock starts when the arm is up after the push, while the arm drives home by itself.
+- Repeated participants: starting a participant again from the beginning moves their older files to
+  `data/old/` at the first saved block (nothing is deleted). Resuming with `--start-level` /
+  `--start-question` continues in the participant's latest file: earlier blocks are kept, blocks from the
+  resume point on are replaced. File names include seconds, so restarts never overwrite each other.

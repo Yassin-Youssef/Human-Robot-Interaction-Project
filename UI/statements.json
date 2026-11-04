@@ -1,18 +1,19 @@
 {
+  "practice": [
+    "Red blocks go in the blue bowl.",
+    "Green blocks go in the red bowl.",
+    "Blue blocks go in the red bowl."
+  ],
   "easy": [
-    "Hexagons go in the blue bowl.",
-    "Red and blue cylinders go in the red bowl.",
-    "Green cylinders go in the blue bowl.",
-    "Red cuboids go in the red bowl.",
-    "Blue cuboids go in the red bowl.",
-    "Green cuboids go in the blue bowl."
+    "Red cubes and red cylinders go in the red bowl.",
+    "Green cubes and blue cubes go in the blue bowl.",
+    "Hexagons go in the red bowl.",
+    "Green cylinders and blue cylinders go in the blue bowl."
   ],
   "hard": [
-    "Hexagons that are NOT blue go in the blue bowl.",
-    "Blue hexagons go in the red bowl.",
-    "Cylinders that are NOT green go in the red bowl.",
-    "Green cylinders go in the blue bowl.",
-    "Cuboids that are NOT red go in the red bowl.",
-    "Red cuboids go in the blue bowl."
+    "Red hexagons and red cylinders go in the blue bowl.",
+    "Green cylinders and green hexagons go in the red bowl.",
+    "Cubes go in the blue bowl.",
+    "Blue cylinders and blue hexagons go in the red bowl."
   ]
 }

@@ -1,23 +1,79 @@
 <?xml version="1.0"?>
-<!-- The robot's normal bringup (cu_panda_bringup hardware.launch) plus the study blocks.
+<!-- The robot's normal bringup plus the study blocks.
 
-     Use it INSTEAD of hardware.launch (stop that one first with Ctrl+C):
+     Use it INSTEAD of the "Launch ROS" button (unlock the arm first):
 
        roslaunch hri_study_description robot.launch
 
-     It starts the real robot stack (franka_control, MoveIt, gripper, cameras, RViz).
-     The only change: robot_description is the combined model from
-     urdf/study_setup.urdf.xacro (lab model + blocks), so the blocks show in RViz.
+     It starts the real robot stack (franka_control, gripper, MoveIt, cameras, RViz) and
+     loads the combined model from urdf/study_setup.urdf.xacro (lab model + blocks, bowls,
+     decision X), so they show in RViz and on the camera picture.
+
+     This is a copy of the lab's cu_panda_bringup/launch/hardware.launch (version of
+     2026-11-03), because that file uses stop_at_shutdown and joint_names without
+     declaring them and so cannot be started or included. The only differences: the two
+     args are declared here (defaults of the lab's franka_gripper.launch), $(dirname)
+     paths point to cu_panda_bringup, and robot_description is our combined model.
+     If the lab changes hardware.launch again, compare and update this copy.
      After editing config/blocks.yaml, restart this launch file. -->
 <launch>
-  <arg name="rviz" default="true"/>
+  <arg name="robot_ip" value="10.0.0.2" />
+  <arg name="robot" value="panda"/>
+  <arg name="arm_id" default="panda" />
+  <arg name="load_gripper" default="true" />
+  <arg name="rviz" default="true" />
+  <!-- Missing in the lab's file; values = defaults of franka_gripper.launch. -->
+  <arg name="stop_at_shutdown" default="false" />
+  <arg name="joint_names" default="[$(arg arm_id)_finger_joint1, $(arg arm_id)_finger_joint2]" />
 
-  <include file="$(find cu_panda_bringup)/launch/hardware.launch">
-    <arg name="rviz" value="$(arg rviz)"/>
-  </include>
-
-  <!-- Replaces the robot_description that hardware.launch set above. roslaunch keeps the
-       last value and sets all parameters before any node starts. -->
+  <!-- Our combined model instead of the lab's upload_description.launch. -->
   <param name="robot_description"
          command="xacro $(find hri_study_description)/urdf/study_setup.urdf.xacro"/>
+
+  <node name="franka_gripper" pkg="franka_gripper" type="franka_gripper_node" output="screen">
+    <param name="robot_ip" value="$(arg robot_ip)"/>
+    <param name="stop_at_shutdown" value="$(arg stop_at_shutdown)" />
+    <rosparam command="load" file="$(find cu_panda_bringup)/config/franka_gripper_node.yaml" />
+    <rosparam param="joint_names" subst_value="true">$(arg joint_names)</rosparam>
+  </node>
+
+  <node name="franka_control" pkg="franka_control" type="franka_control_node" output="screen" required="true">
+    <rosparam command="load" file="$(find cu_panda_bringup)/config/franka_control_node.yaml" subst_value="true" />
+    <param name="robot_ip" value="$(arg robot_ip)" />
+  </node>
+
+  <rosparam command="load" file="$(find cu_panda_bringup)/config/default_controllers.yaml" subst_value="true" />
+  <node name="state_controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="franka_state_controller"/>
+  <node name="traj_controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="position_joint_trajectory_controller"/>
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" output="screen"/>
+  <node name="joint_state_publisher" type="joint_state_publisher" pkg="joint_state_publisher" output="screen">
+    <rosparam if="$(arg load_gripper)" param="source_list">[franka_state_controller/joint_states, franka_gripper/joint_states] </rosparam>
+    <rosparam unless="$(arg load_gripper)" param="source_list">[franka_state_controller/joint_states] </rosparam>
+    <param name="rate" value="100"/>
+  </node>
+
+  <include file="$(find cu_panda_moveit_config)/launch/move_group.launch" />
+
+  <node name="moveit_by_name" pkg="moveit_by_name" type="moveit_by_name" />
+
+  <include file="$(find cu_logitech_quickcam)/launch/cam.launch" />
+  <param name="cam/camera_frame_id" value="cam"/>
+  <group ns="cam/intrinsic_controls">
+      <param name="brightness" value="0"/>
+      <param name="contrast" value="10"/>
+      <param name="exposure" value="15"/>
+      <param name="gain" value="75"/>
+  </group>
+
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="enable_pointcloud" value="true"/>
+    <arg name="align_depth" value="true"/>
+    <arg name="enable_sync" value="true"/>
+    <arg name="camera" value="realsense"/>
+  </include>
+
+  <include file="$(find tts_piper)/launch/tts_standalone.launch" />
+
+  <include file="$(find cu_panda_bringup)/launch/rviz.launch" if="$(arg rviz)" />
 </launch>
