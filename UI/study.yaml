@@ -1,0 +1,60 @@
+# Study content: statements, correct bowls and the fixed sequence.
+# Edit this file to change the study; hri_ui.py reads it at start and checks it.
+#
+# Participant IDs: A01, A02, ... = screen version (hint is text on the screen).
+#                  B01, B02, ... = robot version (hint is the robot pushing the block).
+# Every participant, in both versions, gets the same sequence: the same block order and the
+# same wrong hints. (With more than one sequence below they would rotate by participant
+# number: 01 -> 1, 02 -> 2, ...)
+#
+# Block names: "<color> <shape>", colors red/blue/green, shapes cuboid/cylinder/hexagon
+# (the statements say "cube", the block name says "cuboid").
+
+rounds:
+  practice:
+    statements:
+      - Red blocks go in the blue bowl.
+      - Green blocks go in the red bowl.
+      - Blue blocks go in the red bowl.
+    # block: [correct bowl, number of the statement that decides it]
+    answers:
+      green cuboid: [red, 2]
+      red cylinder: [blue, 1]
+      blue hexagon: [red, 3]
+
+  round1:
+    statements:
+      - Hexagons go in the red bowl.
+      - Blue cubes and blue cylinders go in the blue bowl.
+      - Red cubes and green cylinders go in the red bowl.
+      - Green cubes and red cylinders go in the blue bowl.
+    answers:
+      green hexagon: [red, 1]
+      blue hexagon: [red, 1]
+      blue cylinder: [blue, 2]
+      red cuboid: [red, 3]
+      green cylinder: [red, 3]
+      green cuboid: [blue, 4]
+
+  round2:
+    statements:
+      - Cylinders go in the red bowl.
+      - Red cubes and red hexagons go in the blue bowl.
+      - Green cubes and blue hexagons go in the red bowl.
+      - Blue cubes and green hexagons go in the blue bowl.
+    answers:
+      green cylinder: [red, 1]
+      red cylinder: [red, 1]
+      blue cylinder: [red, 1]
+      red hexagon: [blue, 2]
+      blue hexagon: [red, 3]
+      blue cuboid: [blue, 4]
+
+# order: the blocks in the order they are presented.
+# wrong: block numbers (1 = first block) whose hint points to the OTHER bowl on purpose.
+#        Never block 1. The practice round has no wrong hints.
+sequences:
+  - # the sequence for everyone
+    practice: {order: [green cuboid, red cylinder, blue hexagon], wrong: []}
+    round1: {order: [red cuboid, green hexagon, green cuboid, blue cylinder, green cylinder, blue hexagon], wrong: [3, 6]}
+    round2: {order: [red cylinder, blue hexagon, green cylinder, red hexagon, blue cuboid, blue cylinder], wrong: [2, 5]}

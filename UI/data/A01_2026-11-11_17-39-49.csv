@@ -1,0 +1,2 @@
+Participant,Version,Round,Block number,Block,Correct bowl,Hinted bowl,Hint correct,Chosen bowl,Followed hint,Decision time (s)
+A01,screen,1,1,red cuboid,red,red,yes,red,yes,1.8

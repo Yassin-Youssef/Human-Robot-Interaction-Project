@@ -14,14 +14,14 @@ fake_robot:
   point: 3.0
   home: 3.0
 
-# Session structure, in this order. Ids must match the level column in sequences.csv and
-# the keys in statements.json. reading_time_s: time on the statements screen, with a
-# countdown, then the level starts by itself (Enter starts earlier); null = no limit.
-# The practice round is skipped if sequences.csv has no practice rows for the participant.
+# Session structure, in this order. Ids must match the rounds in study.yaml.
+# label: shown to the participant. questions: blocks per round (must match study.yaml).
+# reading_time_s: time on the statements screen, with a countdown, then the round starts by
+# itself (Enter starts earlier); null = no limit.
 levels:
-  practice: {label: "Practice round", questions: 3, reading_time_s: null}   # 3 statements
-  easy:     {label: "Level 1",        questions: 6, reading_time_s: 40}     # 4 statements
-  hard:     {label: "Level 2",        questions: 6, reading_time_s: 20}     # 4 statements, same difficulty
+  practice: {label: "Practice round", questions: 3, reading_time_s: null}
+  round1:   {label: "Round 1",        questions: 6, reading_time_s: 40}
+  round2:   {label: "Round 2",        questions: 6, reading_time_s: 20}
 
 font_family: Quicksand   # rounded friendly font (installed); Helvetica if missing
 font_sizes:

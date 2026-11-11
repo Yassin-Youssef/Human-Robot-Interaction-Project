@@ -68,9 +68,9 @@ The robot code lives in the catkin package `~/ros/src/hri_study_description`:
 # terminal 1: the robot, INSTEAD of the "Launch ROS" button (arm unlocked in Desk first)
 roslaunch hri_study_description robot.launch
 # terminal 2, in ~/ros/UI:
-python3 hri_ui.py --participant P07 --dry-run       # fake robot, no ROS
-python3 hri_ui.py --participant P07 --ros-dry-run   # real adapter, prints only, sends nothing, no ROS needed
-python3 hri_ui.py --participant P07                 # real robot
+python3 hri_ui.py --participant A01 --dry-run       # fake robot, no ROS
+python3 hri_ui.py --participant A01 --ros-dry-run   # real adapter, prints only, sends nothing, no ROS needed
+python3 hri_ui.py --participant A01                 # real robot
 ```
 With `confirm: true` in `pick.yaml` every robot move waits for Enter in terminal 2
 (q + Enter stops the call and the UI shows ROBOT ERROR). Watch terminal 2 during tests.
@@ -80,7 +80,7 @@ pushes the block toward the bowl at 2 cm/s until the block center is 15 cm from 
 (8.25 cm push, gripper 10 cm in about 5 s), goes up and home. It returns when the arm is home,
 so the UI's decision clock starts then. Red and blue are exact mirror images. Settings: `push`
 in `pick.yaml`; the decision spot is midway between the bowls in `blocks.yaml`.
-Resume after an interruption: `--start-level hard --start-question 4`. Participant monitor: set
+Resume after an interruption: `--start-level round2 --start-question 4`. Participant monitor: set
 `participant_monitor_x_offset` in `config.yaml`. Keys: participant Enter, experimenter Space (continue) and Escape (quit); all keys work in both windows.
 The UI times each decision (advice fully given to Enter). On robot trials the clock starts when `point()` returns.
 
@@ -91,7 +91,7 @@ The UI times each decision (advice fully given to Enter). On robot trials the cl
    Check the 9 blocks (colors, shapes) and the labels s1_red_cuboid ... s9_green_hexagon.
    Tape the slots at the `blocks.yaml` positions. Measure the real hexagon and replace the TODO size.
 3. **Start the robot:** stop `hardware.launch`, start `robot.launch` (terminal 1).
-4. **UI without motion:** `python3 hri_ui.py --participant P01 --ros-dry-run`. Every call prints its slot and target.
+4. **UI without motion:** `python3 hri_ui.py --participant B01 --ros-dry-run`. Every call prints its slot and target.
 5. **home():** `rosrun hri_study_description pick_block.py --home`. Same as the script panel "Move Home".
 6. **One pick, plan only:** `rosrun hri_study_description pick_block.py --block "red cuboid" --dry-run`. Watch the path in RViz.
 7. **One pick and place_decision:** `rosrun hri_study_description pick_block.py --block "red cuboid"`.
@@ -109,7 +109,7 @@ The UI times each decision (advice fully given to Enter). On robot trials the cl
     shape (cuboid, cylinder, hexagon), because a cylinder or hexagon may roll or tip.
 12. **Full trial from the command line:** `pick_block.py --block "blue cuboid"`, then
     `pick_block.py --push red`.
-13. **UI with the real robot:** `python3 hri_ui.py --participant P01`. Robot trials now push.
+13. **UI with the real robot:** `python3 hri_ui.py --participant B01`. Robot trials now push.
 14. Only after all of this: set `confirm: false` in `pick.yaml`.
 
 ## 4b. Cue pretest checklist (3 to 5 people, before the pilot)

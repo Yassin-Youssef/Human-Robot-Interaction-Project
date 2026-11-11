@@ -4,11 +4,14 @@
 Participant window: fullscreen, the participant only presses Enter.
 Experimenter window: read-only, shows the current trial and the decision times.
 Space = continue, Escape = quit (both work in either window).
-Decision time = advice fully shown (screen text, or robot holding the point) until Enter.
+Two versions with the same flow: A01, A02, ... = screen version (the hint is text on the
+screen), B01, B02, ... = robot version (the hint is the robot pushing the block). Statements,
+correct bowls, block order and wrong hints come from study.yaml.
+Decision time = hint fully shown (screen text, or robot back up after the push) until Enter.
 Times are shown in the experimenter window and printed in the terminal. The experimenter clicks
 the bowl the participant chose; every block is saved to data/<participant>_<date>.csv.
 
-    python hri_ui.py --participant P07 --dry-run
+    python hri_ui.py --participant A01 --dry-run
 """
 import sys
 
@@ -18,7 +21,7 @@ import argparse
 import csv
 import datetime
 import glob
-import json
+import re
 import math
 import os
 import shutil
@@ -35,20 +38,23 @@ from robot_interface import BLOCKS, BOWLS, FakeRobot, RosRobot
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data")   # one CSV per participant session, kept off GitHub
 # Saved columns: the same fields, labels and order as the experimenter window.
-DATA_COLUMNS = [("participant", "Participant"), ("level", "Level"), ("question", "Question"),
-                ("source", "Source"), ("block", "Block in slot"), ("correct", "Correct bowl"),
-                ("advice", "Advice"), ("chosen", "Participant chose"), ("time_s", "Decision time (s)")]
-# Session order. Ids as in sequences.csv and statements.json; labels, block counts and
-# reading times come from `levels` in config.yaml. "practice" is skipped (with a notice)
-# when sequences.csv has no practice rows for the participant.
-LEVELS = ["practice", "easy", "hard"]
+# Saved columns, one row per block: (key, header).
+DATA_COLUMNS = [("participant", "Participant"), ("version", "Version"), ("round", "Round"),
+                ("question", "Block number"), ("block", "Block"), ("correct", "Correct bowl"),
+                ("advice", "Hinted bowl"), ("hint_correct", "Hint correct"),
+                ("chosen", "Chosen bowl"), ("followed", "Followed hint"), ("time_s", "Decision time (s)")]
+# Session order. Ids as in study.yaml; labels, block counts and reading times come from
+# `levels` in config.yaml.
+LEVELS = ["practice", "round1", "round2"]
+ROUND_NAMES = {"practice": "practice", "round1": "1", "round2": "2"}   # "Round" column
 DEFAULT_LEVELS = {
     "practice": {"label": "Practice round", "questions": 3, "reading_time_s": None},
-    "easy": {"label": "Level 1", "questions": 6, "reading_time_s": 30},
-    "hard": {"label": "Level 2", "questions": 6, "reading_time_s": 15},
+    "round1": {"label": "Round 1", "questions": 6, "reading_time_s": 40},
+    "round2": {"label": "Round 2", "questions": 6, "reading_time_s": 20},
 }
 QUESTIONS_PER_LEVEL = 6   # largest level, for --start-question
-SOURCES = ("robot", "screen")
+VERSIONS = {"A": "screen", "B": "robot"}   # first letter of the participant ID
+
 # Friendly theme: soft lavender background, content on a white rounded card.
 BG = "#E9E3F7"        # lavender background
 CARD = "#FFFFFF"      # the card the content sits on
@@ -84,13 +90,13 @@ LAYOUT = [
 
 EXPERIMENTER_FIELDS = [
     ("participant", "Participant"),
-    ("level", "Level"),
-    ("question", "Question"),
-    ("source", "Source"),
-    ("block", "Block in slot"),
+    ("version", "Version"),
+    ("round", "Round"),
+    ("question", "Block number"),
+    ("block", "Block"),
     ("correct", "Correct bowl"),
-    ("advice", "Advice"),
-    ("chosen", "Participant chose"),
+    ("advice", "Hinted bowl"),
+    ("chosen", "Chosen bowl"),
     ("step", "Step"),
     ("timer", "Decision time"),
 ]
@@ -100,9 +106,10 @@ STEP_NAMES = {
     "statements": "statements",
     "idle": "waiting for Enter (next block)",
     "presenting": "robot presenting",
-    "advice": "advice shown",
+    "advice": "hint shown",
+    "explain": "practice: correct answer shown",
     "homing": "robot returning home",
-    "level_complete": "level complete",
+    "level_complete": "round complete",
     "debrief": "debrief",
 }
 
@@ -145,55 +152,65 @@ def load_config(path):
     return config
 
 
-def load_trials(path, participant, levels=DEFAULT_LEVELS):
-    """Return {level: [row, ...]} for one participant, sorted by question.
+def load_study(path, participant, levels=DEFAULT_LEVELS):
+    """Read study.yaml and build this participant's trials.
 
-    The practice level is optional: without practice rows it is left out (with a notice).
+    Returns (trials, statements, sequence number). trials = {level: [trial, ...]} in the
+    order presented; a trial is a dict with block, correct, rule, advice, source.
     """
-    if not os.path.isfile(path):
-        fail("sequences file not found: %s" % path)
-    with open(path, newline="", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
-    valid_ids = sorted(set(r["participant"] for r in rows))
-    mine = [r for r in rows if r["participant"] == participant]
-    if not mine:
-        print("Unknown participant '%s'. Valid IDs: %s" % (participant, " ".join(valid_ids)))
+    m = re.match(r"^([AB])(\d+)$", participant)
+    if not m or int(m.group(2)) < 1:
+        print("Unknown participant '%s'. Use A01, A02, ... (screen version) or B01, B02, ... "
+              "(robot version)." % participant)
         sys.exit(1)
-
-    trials = {}
-    for level in LEVELS:
-        level_rows = sorted([r for r in mine if r["level"] == level], key=lambda r: int(r["question"]))
-        if not level_rows and level == "practice":
-            print("Note: no practice rows for %s in %s, the practice round is skipped." % (participant, path))
-            continue
-        n = int(levels[level]["questions"])
-        questions = [int(r["question"]) for r in level_rows]
-        if questions != list(range(1, n + 1)):
-            fail("%s %s: expected questions 1-%d, found %s" % (participant, level, n, questions))
-        for r in level_rows:
-            where = "%s %s question %s" % (participant, level, r["question"])
-            if r["block"] not in BLOCKS:
-                fail("%s: unknown block %r" % (where, r["block"]))
-            if r["source"] not in SOURCES:
-                fail("%s: source must be robot or screen, found %r" % (where, r["source"]))
-            if r["advice"] not in BOWLS or r["correct"] not in BOWLS:
-                fail("%s: advice and correct must be red or blue" % where)
-        trials[level] = level_rows
-    return trials
-
-
-def load_statements(path, trials):
+    source = VERSIONS[m.group(1)]
     if not os.path.isfile(path):
-        fail("statements file not found: %s" % path)
+        fail("study file not found: %s" % path)
     with open(path, encoding="utf-8") as f:
-        statements = json.load(f)
-    for level in trials:
-        if not statements.get(level):
-            fail("statements.json: no statements for %s" % level)
-        for r in trials[level]:
-            if r["statement"] not in statements[level]:
-                fail("sequences and statements.json do not match: %r" % r["statement"])
-    return statements
+        study = yaml.safe_load(f) or {}
+    rounds, sequences = study.get("rounds") or {}, study.get("sequences") or []
+    if not sequences:
+        fail("%s: no sequences" % path)
+    # One sequence = everyone gets it; several = they rotate by participant number.
+    seq_no = (int(m.group(2)) - 1) % len(sequences) + 1
+
+    trials, statements = {}, {}
+    for level in LEVELS:
+        where = "%s, %s" % (os.path.basename(path), level)
+        spec = rounds.get(level) or {}
+        statements[level] = [str(x) for x in spec.get("statements") or []]
+        answers = spec.get("answers") or {}
+        if not statements[level]:
+            fail("%s: no statements" % where)
+        for block, answer in answers.items():
+            if block not in BLOCKS:
+                fail("%s: unknown block %r in answers" % (where, block))
+            if (not isinstance(answer, list) or len(answer) != 2 or answer[0] not in BOWLS
+                    or not isinstance(answer[1], int) or not 1 <= answer[1] <= len(statements[level])):
+                fail("%s: answer of %r must be [red or blue, statement number]" % (where, block))
+        # Check all sequences, not only this participant's, so a typo shows up at once.
+        for k, seq in enumerate(sequences, start=1):
+            part = (seq or {}).get(level) or {}
+            order, wrong = part.get("order") or [], part.get("wrong") or []
+            w = "%s, sequence %d" % (where, k)
+            n = int(levels[level]["questions"])
+            if len(order) != n:
+                fail("%s: expected %d blocks, found %d" % (w, n, len(order)))
+            for block in order:
+                if block not in answers:
+                    fail("%s: block %r has no answer in rounds.%s.answers" % (w, block, level))
+            if len(set(order)) != len(order):
+                fail("%s: a block appears twice" % w)
+            if any(not isinstance(x, int) or not 2 <= x <= n for x in wrong) or len(set(wrong)) != len(wrong):
+                fail("%s: wrong must be block numbers from 2 to %d, found %r" % (w, n, wrong))
+            if k == seq_no:
+                trials[level] = []
+                for q, block in enumerate(order, start=1):
+                    correct, rule = answers[block]
+                    other = "blue" if correct == "red" else "red"
+                    trials[level].append({"block": block, "correct": correct, "rule": rule,
+                                          "advice": other if q in wrong else correct, "source": source})
+    return trials, statements, seq_no
 
 
 class App(object):
@@ -206,6 +223,7 @@ class App(object):
         self.config = config
         self.robot = robot
         self.levels = [lv for lv in LEVELS if lv in trials]
+        self.version = VERSIONS[participant[0]]
         if start_level is None or start_level not in self.levels:
             start_level = self.levels[0]
         self.level_index = self.levels.index(start_level)
@@ -318,8 +336,8 @@ class App(object):
         self.continue_button.pack(side="left")
         tk.Button(buttons, text="Quit (Esc)", font=self.font("experimenter"), takefocus=0,
                   command=self.on_escape).pack(side="left", padx=(10, 0))
-        # Ends the current part (practice, Level 1 or Level 2) at once; only when the robot is still.
-        self.skip_button = tk.Button(buttons, text="Skip level", font=self.font("experimenter"), takefocus=0,
+        # Ends the current part (practice, Round 1 or Round 2) at once; only when the robot is still.
+        self.skip_button = tk.Button(buttons, text="Skip round", font=self.font("experimenter"), takefocus=0,
                                      command=self.on_skip)
         self.skip_button.pack(side="left", padx=(10, 0))
         # The bowl the participant chose. Must be clicked before the next block can start.
@@ -407,16 +425,18 @@ class App(object):
         rounded(0, 0, CARD)
 
     def draw_advice_text(self, cx, cy, bowl):
-        """'System recommends: ' in dark gray and the bowl word in the bowl color, centered."""
-        head, word = self.advice_text.rsplit(" ", 1)
+        """The hint sentence in dark gray with the bowl word bold in the bowl color, centered."""
+        text = self.advice_text
+        i = text.find(bowl)
+        head, word, tail = text[:i], text[i:i + len(bowl)], text[i + len(bowl):]
         font = tkfont.Font(font=self.font("text"))
         bold = tkfont.Font(font=self.font("text", "bold"))
-        total = font.measure(head + " ") + bold.measure(word)
-        x = cx - total / 2
-        a = self.canvas.create_text(x, cy, text=head + " ", anchor="w", font=font, fill=FG)
-        b = self.canvas.create_text(x + font.measure(head + " "), cy, text=word, anchor="w", font=bold,
-                                    fill=BOWL_COLORS[bowl][0])
-        self.fade_items += [(a, {"fill": FG}), (b, {"fill": BOWL_COLORS[bowl][0]})]
+        x = cx - (font.measure(head) + bold.measure(word) + font.measure(tail)) / 2
+        for part, f, color in ((head, font, FG), (word, bold, BOWL_COLORS[bowl][0]), (tail, font, FG)):
+            if part:
+                item = self.canvas.create_text(x, cy, text=part, anchor="w", font=f, fill=color)
+                self.fade_items.append((item, {"fill": color}))
+            x += f.measure(part)
 
     def draw_progress(self, w, h):
         n, r, gap = self.n_questions(), h * 0.011, h * 0.045
@@ -521,12 +541,12 @@ class App(object):
             step = "ROBOT ERROR: %s" % self.robot_error
         values = {
             "participant": self.participant,
-            "level": self.level,
+            "version": self.version,
+            "round": "%s (%s)" % (ROUND_NAMES[self.level], self.spec()["label"]),
             "question": "%d of %d" % (self.question, self.n_questions()),
-            "source": t["source"],
             "block": t["block"],
             "correct": t["correct"],
-            "advice": t["advice"],
+            "advice": t["advice"] + ("   (WRONG on purpose)" if t["advice"] != t["correct"] else ""),
             "chosen": self.choice_text(),
             "step": step,
             "timer": self.timer_text(),
@@ -548,9 +568,11 @@ class App(object):
                 return
             self.pending = None
             if self.level_index + 1 < len(self.levels):
-                reminder = "Reload the blocks, ask the trust ratings out loud, then press Space"
+                reminder = ("Reload the blocks, give paper questionnaire %s, then press Space"
+                            % ROUND_NAMES[self.level])
             else:
-                reminder = "Ask the trust ratings out loud, then press Space for the debrief"
+                reminder = ("Give paper questionnaire %s, then press Space for the debrief"
+                            % ROUND_NAMES[self.level])
         elif self.state == "debrief":
             reminder = "Session finished. Press Escape to quit."
         self.exp_reminder.configure(text=reminder)
@@ -562,7 +584,7 @@ class App(object):
         if self.choice_missing() and self.state in ("idle", "level_complete"):
             reminder = "Click the bowl the participant chose first (Red bowl or Blue bowl). " + reminder
             self.exp_reminder.configure(text=reminder)
-        can_skip = self.state in ("statements", "idle", "advice") and not self.busy and self.robot_error is None
+        can_skip = self.state in ("statements", "idle", "advice", "explain") and not self.busy and self.robot_error is None
         self.skip_button.configure(state="normal" if can_skip else "disabled")
         if can_continue and reminder != self.last_printed:
             print("[UI] " + reminder.replace("press Space", "press Space or click Continue")
@@ -645,6 +667,8 @@ class App(object):
                 return   # advice still fading in, the clock has not started yet
             self.stop_stopwatch()
             self.finish_question()
+        elif self.state == "explain":
+            self.next_question()
 
     def on_space(self, event=None):
         if self.busy:
@@ -691,12 +715,14 @@ class App(object):
         self.data_path = files[-1]
         order = {lv: i for i, lv in enumerate(self.levels)}
         keys = {label: key for key, label in DATA_COLUMNS}
+        level_of = {name: lv for lv, name in ROUND_NAMES.items()}
         with open(self.data_path, newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
                 r = {keys.get(k, k): v for k, v in row.items()}
                 if "question" not in r or not r["question"]:
                     continue
-                r["question"] = int(str(r["question"]).split()[0])   # "3 of 6" -> 3
+                r["question"] = int(str(r["question"]).split()[0])
+                r["level"] = level_of.get(r.get("round"))
                 if r.get("level") not in order or (order[r["level"]], r["question"]) >= (self.level_index, start_question):
                     continue   # this block is run again now
                 r["time_s"] = float(r["time_s"]) if r.get("time_s") else None
@@ -727,7 +753,9 @@ class App(object):
             if r["chosen"] is None:
                 continue
             row = {key: r.get(key, "") for key, _ in DATA_COLUMNS}
-            row["question"] = "%d of %d" % (int(r["question"]), int(self.spec(r["level"])["questions"]))
+            row["question"] = int(r["question"])
+            row["hint_correct"] = "yes" if r["advice"] == r["correct"] else "no"
+            row["followed"] = "yes" if r["chosen"] == r["advice"] else "no"
             row["time_s"] = "" if r["time_s"] is None else round(r["time_s"], 2)
             rows.append(row)
         return rows
@@ -776,7 +804,7 @@ class App(object):
 
     def on_skip(self):
         """Skip the rest of the current level: go straight to its end screen."""
-        if self.busy or self.state not in ("statements", "idle", "advice"):
+        if self.busy or self.state not in ("statements", "idle", "advice", "explain"):
             return
         label = self.spec()["label"]
         if not messagebox.askyesno("Skip", "Skip the rest of %s?" % label, parent=self.root):
@@ -853,14 +881,15 @@ class App(object):
     def show_advice(self):
         self.state = "advice"
         t = self.trial()
-        self.pending = {"participant": self.participant, "level": self.level, "question": self.question,
-                        "block": t["block"], "source": t["source"], "advice": t["advice"],
+        self.pending = {"participant": self.participant, "version": self.version,
+                        "round": ROUND_NAMES[self.level], "level": self.level, "question": self.question,
+                        "block": t["block"], "advice": t["advice"],
                         "correct": t["correct"], "chosen": None, "time_s": None}
         self.records.append(self.pending)
         # Both sources get an icon of the same size, style and gray color in the same place.
         if t["source"] == "screen":
             self.set_screen(icon="bowl", bowl=t["advice"], progress=True, counter=self.counter_text(),
-                            advice="System recommends: %s" % t["advice"].upper())
+                            advice="I suggest the %s bowl." % t["advice"])
             # The stopwatch starts once the advice is fully faded in.
             self.root.after(self.fade_ms(), self.start_stopwatch)
         else:
@@ -876,11 +905,26 @@ class App(object):
             self.set_screen(icon="loading", progress=True, counter=self.counter_text())
             self.run_robot([("home",)], self.after_home)
         else:
-            self.next_question()
+            self.after_answer()
 
     def after_home(self):
         self.pointing = False
-        self.next_question()
+        self.after_answer()
+
+    def after_answer(self):
+        if self.level == "practice":
+            self.show_explanation()
+        else:
+            self.next_question()
+
+    def show_explanation(self):
+        """Practice only: the correct bowl and the statement that decides it."""
+        self.state = "explain"
+        t = self.trial()
+        self.set_screen(progress=True, counter=self.counter_text(),
+                        status="The correct bowl is the %s bowl." % t["correct"],
+                        advice="Rule %d: %s" % (t["rule"], self.statements[self.level][t["rule"] - 1]),
+                        prompt="Press Enter to continue")
 
     def next_question(self):
         if self.question < self.n_questions():
@@ -899,8 +943,8 @@ class App(object):
             self.set_screen(status="Thank you. Please wait.",
                             hint="Experimenter: press Space for the debrief")
         else:
-            self.set_screen(status="Level complete. Please wait.",
-                            hint="Experimenter: press Space to start the next level")
+            self.set_screen(status="Round complete. Please wait.",
+                            hint="Experimenter: press Space to start the next round")
 
     def show_debrief(self):
         self.state = "debrief"
@@ -943,14 +987,15 @@ class App(object):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Participant UI for the HRI robot trust study.")
-    parser.add_argument("--participant", required=True, help="participant ID, e.g. P07")
+    parser.add_argument("--participant", required=True,
+                        help="participant ID: A01, A02, ... (screen version) or B01, B02, ... (robot version)")
     parser.add_argument("--dry-run", action="store_true", help="use the fake robot (no ROS, no robot)")
     parser.add_argument("--ros-dry-run", action="store_true",
                         help="real robot adapter, but only print each call; sends nothing, needs no ROS")
-    parser.add_argument("--sequences", default=os.path.join(HERE, "sequences.csv"))
+    parser.add_argument("--study", default=os.path.join(HERE, "study.yaml"))
     parser.add_argument("--config", default=os.path.join(HERE, "config.yaml"))
     parser.add_argument("--start-level", choices=LEVELS, default=None,
-                        help="level to start at (default: the first one, practice if it exists)")
+                        help="round to start at: practice, round1 or round2 (default: practice)")
     parser.add_argument("--start-question", type=int, default=1,
                         help="question to resume at (1-%d)" % QUESTIONS_PER_LEVEL)
     args = parser.parse_args(argv)
@@ -961,9 +1006,8 @@ def main(argv=None):
 
     participant = args.participant.strip().upper()
     config = load_config(args.config)
-    trials = load_trials(args.sequences, participant, config["levels"])
-    statements_path = os.path.join(os.path.dirname(os.path.abspath(args.sequences)), "statements.json")
-    statements = load_statements(statements_path, trials)
+    trials, statements, seq_no = load_study(args.study, participant, config["levels"])
+    print("%s: %s version, sequence %d" % (participant, VERSIONS[participant[0]], seq_no))
 
     if args.dry_run:
         print("Dry run: fake robot, no ROS.")

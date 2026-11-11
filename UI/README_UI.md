@@ -2,6 +2,15 @@
 
 Give this file to Claude Code in the project folder and say: "Follow README_UI.md to build the UI. Show me a short plan first, then build." This file is the single source of truth for the UI. If it conflicts with older files or summaries, THIS FILE WINS.
 
+
+## Current design (v4, 2026-11-11). Overrides the older sections below where they differ.
+
+- Two versions with the same flow. **A01, A02, ...** = screen version: the hint is the text "I suggest the red bowl." / "I suggest the blue bowl." **B01, B02, ...** = robot version: the hint is the robot pushing the block toward a bowl, no text hint. The UI reads the version from the ID. In both versions the robot picks the block and places it in the decision area.
+- Session: practice (3 statements, no time limit, 3 blocks, the correct bowl and its rule are shown after each block), Round 1 (statements 40 s, 6 blocks), paper questionnaire 1, Round 2 (statements 20 s, 6 blocks), paper questionnaire 2, debrief.
+- All content is in **`study.yaml`**: statements, correct bowl per block, and ONE fixed sequence (block order + wrong hint positions) that every participant gets, in both versions. 2 wrong hints per round (hint points to the other bowl), never on block 1. Edit study.yaml to change the study; the UI checks it at start.
+- Data: one row per block in data/<ID>_<date>.csv and .xlsx: Participant, Version, Round, Block number, Block, Correct bowl, Hinted bowl, Hint correct, Chosen bowl, Followed hint, Decision time (s). Choice (experimenter clicks the bowl) and decision time are recorded automatically. Enter and Space both continue.
+- Resume: `--start-level round1|round2 --start-question N`.
+
 ## 0. Rules for Claude Code
 
 - Show a short plan first and wait for approval before building. List every assumption at the end.
@@ -20,7 +29,7 @@ Within-subjects HRI study (about 20 participants). Does advice from a physical r
 - 2 levels, always in this order: easy, then hard. 6 questions per level, 12 in total. No medium level.
 - Before each level, ALL 6 sorting statements are shown together on one screen. The participant reads at their own pace and presses Enter to start. After that the statements are hidden for good and never shown again in that level (memory task).
 - One block per question. The robot places it in the decision area and the participant must decide which bowl.
-- Per level, 3 robot advices and 3 screen advices in random order (max 2 in a row from the same source). The order comes from sequences.csv, never random at run time.
+- Per level, 3 robot advices and 3 screen advices (max 2 in a row from the same source). 4 fixed sequences in a cycle (P01 sequence 1, P02 sequence 2, ..., P05 sequence 1 again), see make_sequences.py. The order comes from sequences.csv, never random at run time.
 - Advice always equals the correct bowl. No score and no feedback after a question.
 - ALL DATA IS ENTERED BY HAND by the group (times, choices, trust ratings, final question) into an Excel sheet. The UI does NOT log, time or save anything about the participant's behavior and has no keys for it.
 
@@ -42,8 +51,8 @@ Tech: Python 3, tkinter (standard library) for both windows. Use `rospy` only in
 ## 4. How to run
 
 ```
-python hri_ui.py --participant P07 --dry-run      # no robot, fake robot
-python hri_ui.py --participant P07                # real robot interface
+python hri_ui.py --participant A01 --dry-run      # no robot, fake robot
+python hri_ui.py --participant A01                # real robot interface
 ```
 Options: `--sequences sequences.csv`, `--config config.yaml`, `--start-level easy|hard`, `--start-question N` (to resume after an interruption). Stop with Escape in the experimenter window (confirm first). Unknown participant: print the valid IDs and exit.
 
@@ -81,13 +90,9 @@ The experimenter window is a convenience so the group knows what to expect and c
 
 Block names used by `pick`: "red cuboid", "red cylinder", "red hexagon", "blue cuboid", "blue cylinder", "blue hexagon", "green cuboid", "green cylinder", "green hexagon". A config file will map each name to a slot (9 slots) later.
 
-## 8. Questions the UI uses (for testing, same as in sequences.csv)
+## 8. Questions the UI uses
 
-Easy statements: Hexagons go in the blue bowl. / Red and blue cylinders go in the red bowl. / Green cylinders go in the blue bowl. / Red cuboids go in the red bowl. / Blue cuboids go in the red bowl. / Green cuboids go in the blue bowl.
-Easy questions (block, correct bowl): blue cylinder, red / red hexagon, blue / green cuboid, blue / red cuboid, red / green cylinder, blue / blue cuboid, red.
-
-Hard statements: Hexagons that are NOT blue go in the blue bowl. / Blue hexagons go in the red bowl. / Cylinders that are NOT green go in the red bowl. / Green cylinders go in the blue bowl. / Cuboids that are NOT red go in the red bowl. / Red cuboids go in the blue bowl.
-Hard questions: green hexagon, blue / red cylinder, red / green cuboid, red / green cylinder, blue / blue hexagon, red / red cuboid, blue.
+The statements and the 4 sequences (block order and advice source) are in `make_sequences.py` (STATEMENTS, KEY, SEQUENCES). Run it to regenerate `sequences.csv` and `statements.json`.
 
 ## 9. Tests Claude Code must run (dry-run, no hardware)
 
@@ -114,7 +119,7 @@ Practice trials, consent form text, final debrief text, the Excel data-entry tem
 - Window placement: the small window is the experimenter window, the fullscreen one is the participant window. Set `participant_monitor_x_offset` in `config.yaml` to the left edge of the participant monitor (for example `1920` if it is to the right of a 1920 px main monitor). Keep the experimenter window on the experimenter monitor, never on the participant screen. Test the placement with `--dry-run` before each session.
 - Keys (changed on request, overrides section 6): Enter, Space and Escape work in both windows, so the experimenter can continue or quit even when the fullscreen participant window has the focus. The waiting and level-end screens show a small line "Experimenter: press Space to ...".
 - Decision time (added on request, overrides "NO timing" in sections 2 and 6): stopwatch from the moment the advice is fully given (screen text shown, or the arm holding the pointing pose) to the participant's Enter. Shown live in the experimenter window, all times listed there, and printed in the terminal after each question and as a summary at the debrief or on Escape. Nothing is saved to disk; copy the times into Excel.
-- Resume after an interruption: `--start-level hard --start-question 4`. Resuming at question 2 to 6 skips the statements screen and shows "Press Enter for the next block".
+- Resume after an interruption: `--start-level round2 --start-question 4`. Resuming at question 2 to 6 skips the statements screen and shows "Press Enter for the next block".
 - Without `--dry-run` the UI uses `RosRobot`, which is still a stub: it stops at the first robot call with a clear error in the experimenter window. Quit with Escape.
 - Between questions there are two Enters: one after the decision (the arm goes home on robot trials) and one on "Press Enter for the next block". Only the first question of a level starts directly from the statements screen.
 - Friendly look (added on request, overrides "one neutral style, no icons, no colors on RED and BLUE,

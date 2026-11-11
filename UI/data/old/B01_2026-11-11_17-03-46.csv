@@ -1,0 +1,5 @@
+Participant,Version,Round,Block number,Block,Correct bowl,Hinted bowl,Hint correct,Chosen bowl,Followed hint,Decision time (s)
+B01,robot,practice,1,green cuboid,red,red,yes,red,yes,20.85
+B01,robot,practice,2,red cylinder,blue,blue,yes,blue,yes,7.49
+B01,robot,practice,3,blue hexagon,red,red,yes,red,yes,9.96
+B01,robot,1,1,red cuboid,red,red,yes,red,yes,23.64

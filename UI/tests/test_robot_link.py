@@ -236,7 +236,7 @@ def silent(fn, *a, **k):
 
 
 # ---------------------------------------------------------------------------------------
-# 1. Names: UI block names, blocks.yaml slots, sequences.csv
+# 1. Names: UI block names, blocks.yaml slots, study.yaml
 # ---------------------------------------------------------------------------------------
 class TestNames(unittest.TestCase):
     def test_every_ui_block_has_exactly_one_slot(self):
@@ -244,10 +244,30 @@ class TestNames(unittest.TestCase):
         slots = [layout.block(name).id for name in ri.BLOCKS]
         self.assertEqual(len(set(slots)), 9)
 
-    def test_every_block_in_sequences_csv_is_known(self):
-        with open(os.path.join(UI_DIR, "sequences.csv")) as f:
-            used = {row["block"] for row in csv.DictReader(f)}
-        self.assertTrue(used <= set(ri.BLOCKS), used - set(ri.BLOCKS))
+    def test_study_yaml_versions_and_cycle(self):
+        import hri_ui
+        path = os.path.join(UI_DIR, "study.yaml")
+        for n in range(1, 13):
+            a, sa, ka = hri_ui.load_study(path, "A%02d" % n)
+            b, sb, kb = hri_ui.load_study(path, "B%02d" % n)
+            self.assertEqual(ka, 1)   # one sequence for everyone
+            self.assertEqual(ka, kb)
+            for level in hri_ui.LEVELS:
+                self.assertTrue(all(t["source"] == "screen" for t in a[level]))
+                self.assertTrue(all(t["source"] == "robot" for t in b[level]))
+                # identical in both versions except the hint source
+                strip = lambda ts: [(t["block"], t["correct"], t["advice"]) for t in ts]
+                self.assertEqual(strip(a[level]), strip(b[level]))
+                self.assertTrue({t["block"] for t in a[level]} <= set(ri.BLOCKS))
+                wrong = [q for q, t in enumerate(a[level], 1) if t["advice"] != t["correct"]]
+                self.assertNotIn(1, wrong)
+                self.assertEqual(len(wrong), 0 if level == "practice" else 2)
+
+    def test_unknown_participant_ids_are_refused(self):
+        import hri_ui
+        for pid in ("P01", "C01", "A00", "A", "AB1"):
+            with self.assertRaises(SystemExit):
+                hri_ui.load_study(os.path.join(UI_DIR, "study.yaml"), pid)
 
     def test_hexagon_is_grasped_on_its_flats(self):
         hexagon = Layout().block("red hexagon")
@@ -374,7 +394,7 @@ class TestRosDryRun(unittest.TestCase):
     def test_dry_run_flags_are_exclusive(self):
         import hri_ui
         with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
-            hri_ui.main(["--participant", "P01", "--dry-run", "--ros-dry-run"])
+            hri_ui.main(["--participant", "A01", "--dry-run", "--ros-dry-run"])
 
 
 # ---------------------------------------------------------------------------------------
