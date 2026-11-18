@@ -1,0 +1,16 @@
+Participant,Version,Round,Block number,Block,Correct bowl,Hinted bowl,Hint correct,Chosen bowl,Followed hint,Decision time (s)
+A01,screen,practice,1,green cuboid,red,red,yes,red,yes,7.92
+A01,screen,practice,2,red cylinder,blue,blue,yes,blue,yes,2.59
+A01,screen,practice,3,blue hexagon,red,red,yes,red,yes,4.45
+A01,screen,1,1,red cuboid,red,red,yes,red,yes,3.98
+A01,screen,1,2,green hexagon,red,red,yes,blue,no,4.88
+A01,screen,1,3,green cuboid,blue,red,no,red,yes,3.57
+A01,screen,1,4,blue cylinder,blue,blue,yes,blue,yes,3.49
+A01,screen,1,5,green cylinder,red,red,yes,red,yes,2.8
+A01,screen,1,6,blue hexagon,red,blue,no,blue,yes,3.67
+A01,screen,2,1,red cylinder,red,red,yes,blue,no,5.33
+A01,screen,2,2,blue hexagon,red,blue,no,red,no,3.06
+A01,screen,2,3,green cylinder,red,red,yes,red,yes,4.86
+A01,screen,2,4,red hexagon,blue,blue,yes,red,no,3.54
+A01,screen,2,5,blue cuboid,blue,red,no,red,yes,4.4
+A01,screen,2,6,blue cylinder,red,red,yes,blue,no,5.87

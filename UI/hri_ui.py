@@ -107,7 +107,6 @@ STEP_NAMES = {
     "idle": "waiting for Enter (next block)",
     "presenting": "robot presenting",
     "advice": "hint shown",
-    "explain": "practice: correct answer shown",
     "homing": "robot returning home",
     "level_complete": "round complete",
     "debrief": "debrief",
@@ -370,6 +369,9 @@ class App(object):
         With icon="bowl" the advice text is drawn with the bowl word in the bowl color.
         """
         self.advice_text = ""
+        if getattr(self, "results_frame", None) is not None:
+            self.results_frame.destroy()
+            self.results_frame = None
         for name, label in self.labels.items():
             label.configure(text=texts.get(name, ""))
         if icon == "bowl" and self.animations():
@@ -584,7 +586,7 @@ class App(object):
         if self.choice_missing() and self.state in ("idle", "level_complete"):
             reminder = "Click the bowl the participant chose first (Red bowl or Blue bowl). " + reminder
             self.exp_reminder.configure(text=reminder)
-        can_skip = self.state in ("statements", "idle", "advice", "explain") and not self.busy and self.robot_error is None
+        can_skip = self.state in ("waiting", "statements", "idle", "advice", "level_complete") and not self.busy and self.robot_error is None
         self.skip_button.configure(state="normal" if can_skip else "disabled")
         if can_continue and reminder != self.last_printed:
             print("[UI] " + reminder.replace("press Space", "press Space or click Continue")
@@ -667,8 +669,6 @@ class App(object):
                 return   # advice still fading in, the clock has not started yet
             self.stop_stopwatch()
             self.finish_question()
-        elif self.state == "explain":
-            self.next_question()
 
     def on_space(self, event=None):
         if self.busy:
@@ -676,12 +676,7 @@ class App(object):
         if self.state == "waiting":
             self.start_level()
         elif self.state == "level_complete":
-            if self.level_index + 1 < len(self.levels):
-                self.level_index += 1
-                self.question = 1
-                self.start_level()
-            else:
-                self.show_debrief()
+            self.go_next_level()
 
     def choice_missing(self):
         return self.pending is not None and self.pending["chosen"] is None
@@ -803,11 +798,14 @@ class App(object):
         os.replace(tmp, path)
 
     def on_skip(self):
-        """Skip the rest of the current level: go straight to its end screen."""
-        if self.busy or self.state not in ("statements", "idle", "advice", "explain"):
+        """Skip the rest of the current level and start the next one (last level: debrief)."""
+        if self.busy or self.state not in ("waiting", "statements", "idle", "advice", "level_complete"):
             return
         label = self.spec()["label"]
-        if not messagebox.askyesno("Skip", "Skip the rest of %s?" % label, parent=self.root):
+        last = self.level_index + 1 >= len(self.levels)
+        target = "the debrief" if last else self.spec(self.levels[self.level_index + 1])["label"]
+        if not messagebox.askyesno("Skip", "Skip the rest of %s and go to %s?" % (label, target),
+                                   parent=self.root):
             return
         if self.countdown_job is not None:
             self.root.after_cancel(self.countdown_job)
@@ -817,8 +815,17 @@ class App(object):
             self.records.remove(self.pending)
             self.pending = None
         self.pointing = False      # the push cue already ends with the arm at home
-        print("[UI] Skipped the rest of %s at block %d of %d" % (label, self.question, self.n_questions()))
-        self.show_level_complete()
+        print("[UI] Skipped the rest of %s at block %d of %d, going to %s"
+              % (label, self.question, self.n_questions(), target))
+        self.go_next_level()
+
+    def go_next_level(self):
+        if self.level_index + 1 < len(self.levels):
+            self.level_index += 1
+            self.question = 1
+            self.start_level()
+        else:
+            self.show_debrief()
 
     def on_escape(self, event=None):
         # Ask on top of the window that got the key, so the dialog is never hidden.
@@ -912,19 +919,7 @@ class App(object):
         self.after_answer()
 
     def after_answer(self):
-        if self.level == "practice":
-            self.show_explanation()
-        else:
-            self.next_question()
-
-    def show_explanation(self):
-        """Practice only: the correct bowl and the statement that decides it."""
-        self.state = "explain"
-        t = self.trial()
-        self.set_screen(progress=True, counter=self.counter_text(),
-                        status="The correct bowl is the %s bowl." % t["correct"],
-                        advice="Rule %d: %s" % (t["rule"], self.statements[self.level][t["rule"] - 1]),
-                        prompt="Press Enter to continue")
+        self.next_question()
 
     def next_question(self):
         if self.question < self.n_questions():
@@ -948,8 +943,44 @@ class App(object):
 
     def show_debrief(self):
         self.state = "debrief"
-        self.set_screen(status=str(self.config["debrief_text"]).strip())
+        self.set_screen(title=str(self.config["debrief_text"]).strip())
+        self.show_results_table()
         self.print_summary()
+
+    def show_results_table(self):
+        """Debrief: every answered block of rounds 1 and 2 (not practice) with the hint, the correct bowl and the choice."""
+        rows = [r for r in self.data_rows() if r["round"] != "practice"]
+        if not rows:
+            return
+        self.pwin.update_idletasks()
+        size = max(12, min(int(self.config["font_sizes"].get("results", 22)), self.pwin.winfo_width() // 70))
+        font = (self.config["font_family"], size)
+        bold = (self.config["font_family"], size, "bold")
+        good, bad = "#2E9E5B", BOWL_COLORS["red"][0]
+        hint_from = "Robot hint" if self.version == "robot" else "Screen hint"
+        frame = tk.Frame(self.pwin, bg=CARD)
+        heads = ["Round", "#", "Block", hint_from, "Hint was", "Correct bowl", "You chose", "Result"]
+        for c, text in enumerate(heads):
+            tk.Label(frame, text=text, font=bold, bg=CARD, fg=ACCENT).grid(row=0, column=c, padx=10, pady=(0, 6))
+        right = 0
+        for i, r in enumerate(rows, start=1):
+            ok = r["chosen"] == r["correct"]
+            right += ok
+            cells = [(r["round"], FG), (str(r["question"]), FG),
+                     (r["block"], FG),
+                     (r["advice"], BOWL_COLORS[r["advice"]][0]),
+                     ("right" if r["hint_correct"] == "yes" else "wrong",
+                      good if r["hint_correct"] == "yes" else bad),
+                     (r["correct"], BOWL_COLORS[r["correct"]][0]),
+                     (r["chosen"], BOWL_COLORS[r["chosen"]][0]),
+                     ("correct" if ok else "wrong", good if ok else bad)]
+            for c, (text, color) in enumerate(cells):
+                tk.Label(frame, text=text, font=bold if c >= 3 else font, bg=CARD, fg=color).grid(
+                    row=i, column=c, padx=10, pady=1)
+        tk.Label(frame, text="You chose the correct bowl %d of %d times." % (right, len(rows)),
+                 font=bold, bg=CARD, fg=FG).grid(row=len(rows) + 1, column=0, columnspan=len(heads), pady=(14, 0))
+        frame.place(relx=0.5, rely=0.17, anchor="n")
+        self.results_frame = frame
 
     # ---------- robot ----------
 
