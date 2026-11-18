@@ -21,7 +21,7 @@ table_corner:
 block_types:
   cuboid:   {shape: box,      size: [0.045, 0.045, 0.045]}
   cylinder: {shape: cylinder, diameter: 0.045, height: 0.045}
-  hexagon:  {shape: hexagon,  across_flats: 0.045, height: 0.045}   # TODO: PLACEHOLDER, measure the real hexagon
+  hexagon:  {shape: hexagon,  across_flats: 0.045, height: 0.045}   # measured
 
 # RGBA colors used in RViz.
 colors:
