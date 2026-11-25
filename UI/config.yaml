@@ -23,6 +23,12 @@ levels:
   round1:   {label: "Round 1",        questions: 6, reading_time_s: 40}
   round2:   {label: "Round 2",        questions: 6, reading_time_s: 20}
 
+# Counterbalancing of the reading time: odd participant numbers (A01/B01, A03/B03, ...) read
+# Round 1 for 40 s and Round 2 for 20 s, even numbers (A02/B02, A04/B04, ...) the other way
+# round: 20 s then 40 s. Rules, blocks and wrong hints stay the same for everyone.
+# false = everyone gets the times above.
+swap_reading_times_for_even: true
+
 font_family: Quicksand   # rounded friendly font (installed); Helvetica if missing
 font_sizes:
   title: 48
@@ -32,9 +38,10 @@ font_sizes:
   hint: 18
   experimenter: 13
 
-# Placeholder. The group writes the final debrief text.
+# Debrief: the thank-you text, with "If you want to see your right and wrong answers, press
+# Enter." Enter shows a table of every block of Round 1 and 2 (hint, correct bowl, choice).
 debrief_text: |
-  Thank you for taking part.
+  Thank you for taking part in this experiment.
 
 # Friendly look: progress dots, advice icons (same gray bowl or robot drawing for both
 # sources), moving robot while the robot works, fade-in of each screen. false = plain text.

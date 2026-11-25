@@ -42,7 +42,8 @@ DATA_DIR = os.path.join(HERE, "data")   # one CSV per participant session, kept 
 DATA_COLUMNS = [("participant", "Participant"), ("version", "Version"), ("round", "Round"),
                 ("question", "Block number"), ("block", "Block"), ("correct", "Correct bowl"),
                 ("advice", "Hinted bowl"), ("hint_correct", "Hint correct"),
-                ("chosen", "Chosen bowl"), ("followed", "Followed hint"), ("time_s", "Decision time (s)")]
+                ("chosen", "Chosen bowl"), ("followed", "Followed hint"), ("time_s", "Decision time (s)"),
+                ("reading_s", "Reading time (s)")]
 # Session order. Ids as in study.yaml; labels, block counts and reading times come from
 # `levels` in config.yaml.
 LEVELS = ["practice", "round1", "round2"]
@@ -74,6 +75,7 @@ DEFAULT_CONFIG = {
     "debrief_text": "Thank you for taking part.",
     "animations": True,   # icons, loading robot, progress dots, fades; false = plain text only
     "fade_ms": 250,
+    "swap_reading_times_for_even": False,
 }
 
 # Participant screen labels, top to bottom: name -> (font size key, relative y, anchor)
@@ -110,6 +112,7 @@ STEP_NAMES = {
     "homing": "robot returning home",
     "level_complete": "round complete",
     "debrief": "debrief",
+    "results": "debrief: answers shown",
 }
 
 
@@ -369,6 +372,12 @@ class App(object):
         With icon="bowl" the advice text is drawn with the bowl word in the bowl color.
         """
         self.advice_text = ""
+        # Wrap text at 80 % of the participant window (not of the whole desktop, which is
+        # wider with two monitors).
+        self.pwin.update_idletasks()
+        if self.pwin.winfo_width() > 1:
+            for label in self.labels.values():
+                label.configure(wraplength=int(self.pwin.winfo_width() * 0.8))
         if getattr(self, "results_frame", None) is not None:
             self.results_frame.destroy()
             self.results_frame = None
@@ -544,7 +553,8 @@ class App(object):
         values = {
             "participant": self.participant,
             "version": self.version,
-            "round": "%s (%s)" % (ROUND_NAMES[self.level], self.spec()["label"]),
+            "round": "%s (%s), reading %s" % (ROUND_NAMES[self.level], self.spec()["label"],
+                                              "no limit" if self.reading_time() is None else "%d s" % self.reading_time()),
             "question": "%d of %d" % (self.question, self.n_questions()),
             "block": t["block"],
             "correct": t["correct"],
@@ -575,7 +585,7 @@ class App(object):
             else:
                 reminder = ("Give paper questionnaire %s, then press Space for the debrief"
                             % ROUND_NAMES[self.level])
-        elif self.state == "debrief":
+        elif self.state in ("debrief", "results"):
             reminder = "Session finished. Press Escape to quit."
         self.exp_reminder.configure(text=reminder)
         can_continue = self.state in ("waiting", "level_complete") and not self.busy
@@ -601,6 +611,16 @@ class App(object):
 
     def spec(self, level=None):
         return self.config["levels"][level or self.level]
+
+    def reading_time(self, level=None):
+        """Reading time (s) of the statements screen; None = no limit. With
+        swap_reading_times_for_even, even participant numbers (A02, B02, ...) get the
+        reading times of round1 and round2 swapped. Rules and blocks never change."""
+        level = level or self.level
+        if (self.config.get("swap_reading_times_for_even") and int(self.participant[1:]) % 2 == 0
+                and level in ("round1", "round2")):
+            level = "round2" if level == "round1" else "round1"
+        return self.spec(level).get("reading_time_s")
 
     def n_questions(self):
         return int(self.spec()["questions"])
@@ -664,6 +684,8 @@ class App(object):
                 return
             self.pending = None
             self.start_question()
+        elif self.state == "debrief":
+            self.show_results()
         elif self.state == "advice":
             if self.advice_start is None:
                 return   # advice still fading in, the clock has not started yet
@@ -852,7 +874,7 @@ class App(object):
         lines = ["%d. %s" % (i + 1, s) for i, s in enumerate(self.statements[self.level])]
         self.set_screen(title="Sorting rules", statements="\n".join(lines),
                         prompt="Press Enter when you are ready")
-        limit = self.spec().get("reading_time_s")   # None = unlimited (Enter only)
+        limit = self.reading_time()   # None = unlimited (Enter only)
         if limit:
             self.remaining = int(limit)
             self._countdown()
@@ -891,7 +913,8 @@ class App(object):
         self.pending = {"participant": self.participant, "version": self.version,
                         "round": ROUND_NAMES[self.level], "level": self.level, "question": self.question,
                         "block": t["block"], "advice": t["advice"],
-                        "correct": t["correct"], "chosen": None, "time_s": None}
+                        "correct": t["correct"], "chosen": None, "time_s": None,
+                        "reading_s": self.reading_time()}
         self.records.append(self.pending)
         # Both sources get an icon of the same size, style and gray color in the same place.
         if t["source"] == "screen":
@@ -942,16 +965,23 @@ class App(object):
                             hint="Experimenter: press Space to start the next round")
 
     def show_debrief(self):
+        """Thank-you screen; Enter then shows the participant's answers (show_results)."""
         self.state = "debrief"
-        self.set_screen(title=str(self.config["debrief_text"]).strip())
-        self.show_results_table()
+        self.set_screen(status=str(self.config["debrief_text"]).strip(),
+                        prompt="If you want to see your right and wrong answers, press Enter.")
         self.print_summary()
+
+    def show_results(self):
+        self.state = "results"
+        self.set_screen(title="Your answers")
+        if not self.show_results_table():
+            self.set_screen(title="Your answers", status="No answers were recorded.")
 
     def show_results_table(self):
         """Debrief: every answered block of rounds 1 and 2 (not practice) with the hint, the correct bowl and the choice."""
         rows = [r for r in self.data_rows() if r["round"] != "practice"]
         if not rows:
-            return
+            return False
         self.pwin.update_idletasks()
         size = max(12, min(int(self.config["font_sizes"].get("results", 22)), self.pwin.winfo_width() // 70))
         font = (self.config["font_family"], size)
@@ -981,6 +1011,7 @@ class App(object):
                  font=bold, bg=CARD, fg=FG).grid(row=len(rows) + 1, column=0, columnspan=len(heads), pady=(14, 0))
         frame.place(relx=0.5, rely=0.17, anchor="n")
         self.results_frame = frame
+        return True
 
     # ---------- robot ----------
 
@@ -1038,7 +1069,11 @@ def main(argv=None):
     participant = args.participant.strip().upper()
     config = load_config(args.config)
     trials, statements, seq_no = load_study(args.study, participant, config["levels"])
-    print("%s: %s version, sequence %d" % (participant, VERSIONS[participant[0]], seq_no))
+    times = [config["levels"][lv].get("reading_time_s") for lv in ("round1", "round2")]
+    if config.get("swap_reading_times_for_even") and int(participant[1:]) % 2 == 0:
+        times.reverse()
+    print("%s: %s version, sequence %d, reading time Round 1 %s s, Round 2 %s s"
+          % (participant, VERSIONS[participant[0]], seq_no, times[0], times[1]))
 
     if args.dry_run:
         print("Dry run: fake robot, no ROS.")
